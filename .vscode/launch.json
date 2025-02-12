@@ -5,7 +5,7 @@
             "name": "Launch",
             "type":"lldb",
             "request": "launch",
-            "program": "${workspaceFolder}/target/debug/compounder.exe",
+            "program": "${workspaceFolder}/target/debug/reshaper.exe",
             "args": [],
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "Build"
