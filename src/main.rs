@@ -1,6 +1,6 @@
 /*
 
-Parse and transform a text file.
+Template-based parsing and transforming of a text file.
 
 Input format description markup:
 <date=iso8601date> <time=M|K>: <systolic=u8>/<diastolic=u8> <pulse=u8>
@@ -33,8 +33,8 @@ mod errorfield;
 use switch::Switch;
 use errorfield::ErrorField;
 
-const WINDOW_SIZE:  egui::Vec2 = egui::Vec2::new(800.0, 400.0);
-const ACCENT_COLOR: egui::Color32 = egui::Color32::from_rgb(170, 0, 204);
+const WINDOW_SIZE:  egui::Vec2 = egui::Vec2::new(640.0, 480.0);
+const ACCENT_COLOR: egui::Color32 = egui::Color32::from_rgb(0, 153, 127); // HSL(170,100,30)
 
 #[derive(serde::Deserialize, serde::Serialize, PartialEq, Copy, Clone)]
 enum InterfaceSize 
@@ -73,7 +73,7 @@ impl Reshaper
     fn set_fonts (context: &egui::Context) {
         let fontname = "Sans Font";
         let mut font = egui::FontDefinitions::default();
-        font.font_data.insert(fontname.to_string(), std::sync::Arc::new(egui::FontData::from_static(include_bytes!("../assets/Inter-Regular.ttf"))));
+        font.font_data.insert(fontname.to_string(), std::sync::Arc::new(egui::FontData::from_static(include_bytes!("../assets/SairaSemiCondensed-Regular.ttf"))));
         if let Some(p) = font.families.get_mut(&egui::FontFamily::Proportional) {
             p.insert(0, fontname.to_string());
             context.set_fonts(font);
@@ -106,8 +106,8 @@ impl Reshaper
     
     fn get_frame (&mut self) -> egui::Frame {
         let cb = match self.ui_mode {
-            InterfaceMode::Dark  => egui::Color32::from_rgb( 20,  20,  20),
-            InterfaceMode::Light => egui::Color32::from_rgb(250, 250, 250)
+            InterfaceMode::Dark  => egui::Color32::from_rgb( 15,  20,  15),
+            InterfaceMode::Light => egui::Color32::from_rgb(245, 250, 245)
         };
         egui::Frame {
             inner_margin: egui::Margin::same(24),
@@ -128,7 +128,7 @@ impl Reshaper
         };
         // context.set_zoom_factor(zf); // Strange things happen when zoom is set through method.
         context.options_mut(|writer| writer.zoom_factor = zf);
-        context.send_viewport_cmd(egui::ViewportCommand::InnerSize(WINDOW_SIZE)); // Hack to make gui resize.
+        // context.send_viewport_cmd(egui::ViewportCommand::InnerSize(WINDOW_SIZE)); // Hack to make gui resize.
     }
 
     fn remode (&mut self, context: &egui::Context, mode: InterfaceMode) {
@@ -153,9 +153,9 @@ impl Default for Reshaper
 {
     fn default() -> Self {
         Self {
-            source: String::from("<date=iso8601date> <time=M|K>: <systolic=u8>/<diastolic=u8> <pulse=u8>"),
-            target: String::from("<date> <time> <systolic> <diastolic> <pulse>"),
-            data: String::from("<date=iso8601date> <time=M|K>: <systolic=u8>/<diastolic=u8> <pulse=u8>"),
+            source: String::from("<date> <time>: <systolic>/<diastolic> <pulse>"),
+            target: String::from("<date>,<time>,<systolic>,<diastolic>,<pulse>"),
+            data: String::new(),
             ui_size: InterfaceSize::Small,
             ui_mode: InterfaceMode::Dark
         }
@@ -171,29 +171,24 @@ impl App for Reshaper
     fn update (&mut self, context: &egui::Context, _frame: &mut Frame) {
         let source_is_valid = self.valid_source();
         let target_is_valid = self.valid_target();
-        egui::CentralPanel::default().frame(self.get_frame()).show(context, |ui| {
-            let styles = ui.style_mut();
-            styles.spacing.item_spacing = egui::Vec2::new(16.0, 8.0);
-            styles.spacing.text_edit_width = 150.0;
-            ui.vertical(|ui| {
-                ui.label(egui::RichText::new("SOURCE").small().weak());
+        context.style_mut(|writer| writer.spacing.item_spacing = egui::Vec2::new(16.0, 8.0));
+        egui::TopBottomPanel::top("").frame(self.get_frame()).exact_height(180.0).resizable(false).show(context, |ui| {
+            ui.with_layout(egui::Layout::top_down_justified(egui::Align::LEFT), |ui| {
+                ui.label(egui::RichText::new("SOURCE TEMPLATE").small().weak());
                 if ui.add(ErrorField::new(&mut self.source, source_is_valid)).lost_focus() {
-                    // self.redo_parts();
+                    // self.redo_parts(); 
                 };
                 ui.add_space(12.0);
-                ui.label(egui::RichText::new("TARGET").small().weak());
+                ui.label(egui::RichText::new("TARGET TEMPLATE").small().weak());
                 if ui.add(ErrorField::new(&mut self.target, target_is_valid)).lost_focus() {
-                    // self.redo_parts();
+                    // self.redo_parts(); 
                 };
             });
-            ui.add_space(36.0);
-            ui.vertical(|ui| {
-                ui.add_space(12.0);
-            });
-            // TODO: Change label button to single slider for adjusting GUI size.
-            ui.add_space(12.0);
-            ui.separator();
-            ui.add_space(12.0);
+        });
+        egui::CentralPanel::default().frame(self.get_frame()).show(context, |ui| {
+            ui.label(egui::RichText::new("(TABLE COMING ...)").small().weak());
+        });
+        egui::TopBottomPanel::bottom("").frame(self.get_frame()).exact_height(90.0).resizable(false).show(context, |ui| {
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
                     ui.label(egui::RichText::new("DARK MODE").small().weak());
@@ -204,10 +199,11 @@ impl App for Reshaper
                         }
                     };
                 });
-                ui.add_space(12.0);
+                ui.add_space(24.0);
                 ui.vertical(|ui| {
                     ui.label(egui::RichText::new("TEXT SIZE").small().weak());
                     ui.horizontal(|ui| {
+                        // TODO: Change label button to single slider for adjusting GUI size.
                         if ui.selectable_label(self.ui_size == InterfaceSize::Small,  "small" ).highlight().clicked() {
                             self.resize(ui.ctx(), InterfaceSize::Small);
                         };
@@ -232,6 +228,7 @@ fn main() -> eframe::Result {
                 .with_resizable(true)
                 .with_maximize_button(true)
                 .with_minimize_button(true)
+                .with_min_inner_size(WINDOW_SIZE)
                 .with_inner_size(WINDOW_SIZE)
                 .with_icon(eframe::icon_data::from_png_bytes(&include_bytes!("../assets/Reshaper.png")[..]).unwrap_or_default()),
             ..Default::default()

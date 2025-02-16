@@ -1,3 +1,4 @@
 # Reshaper
 
-A small application to parse and transform a text file using [egui](https://github.com/emilk/egui).
+Template-based parsing and transforming of a text file. 
+User interface made with [egui](https://github.com/emilk/egui).

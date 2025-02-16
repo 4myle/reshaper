@@ -1,5 +1,5 @@
 [package]
-description = "Parse and transform a text file"
+description = "Template-based parsing and transforming of a text file"
 name = "reshaper"
 authors = ["Roger Salomonsson <medicorab@gmail.com>"]
 version = "1.0.0"
@@ -12,7 +12,17 @@ serde  = { version = "1.0.217" }
 [build-dependencies]
 winresource = "0.1.19"
 
+[profile.dev]
+debug = 2
+opt-level = 0
+# split-debuginfo = "unpacked"
+
+[profile.dev.package."*"]
+debug = 1
+opt-level = 3
+
 [profile.release]
+debug = 0
 opt-level = "z"
 lto = true
 codegen-units = 1

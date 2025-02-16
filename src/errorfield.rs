@@ -35,9 +35,9 @@ impl<'a> ErrorField<'a>
 impl Widget for ErrorField<'_>
 {
     fn ui (mut self, ui: &mut egui::Ui) -> egui::Response {
-        ui.vertical(|ui| { 
+        // ui.vertical(|ui| { 
             self.reflect(ui);
             egui::TextEdit::singleline(self.value).ui(ui).highlight()
-        }).inner
+        // }).inner
     }
 }
