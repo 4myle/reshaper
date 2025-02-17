@@ -37,14 +37,6 @@ const WINDOW_SIZE:  egui::Vec2 = egui::Vec2::new(640.0, 480.0);
 const ACCENT_COLOR: egui::Color32 = egui::Color32::from_rgb(0, 153, 127); // HSL(170,100,30)
 
 #[derive(serde::Deserialize, serde::Serialize, PartialEq, Copy, Clone)]
-enum InterfaceSize 
-{
-    Small,
-    Medium,
-    Large
-}
-
-#[derive(serde::Deserialize, serde::Serialize, PartialEq, Copy, Clone)]
 enum InterfaceMode
 {
     Dark,
@@ -57,7 +49,7 @@ struct Reshaper
     source: String,
     target: String,
     data: String,
-    ui_size: InterfaceSize,
+    ui_size: f32,
     ui_mode: InterfaceMode
 }
 
@@ -116,19 +108,9 @@ impl Reshaper
         }
     }
 
-    fn resize (&mut self, context: &egui::Context, size: InterfaceSize) {
-        if  self.ui_size == size {
-            return;
-        }
-        self.ui_size = size;
-        let zf = match size {
-            InterfaceSize::Small  => 1.0,
-            InterfaceSize::Medium => 1.3,
-            InterfaceSize::Large  => 1.7
-        };
+    fn resize (&mut self, context: &egui::Context) {
         // context.set_zoom_factor(zf); // Strange things happen when zoom is set through method.
-        context.options_mut(|writer| writer.zoom_factor = zf);
-        // context.send_viewport_cmd(egui::ViewportCommand::InnerSize(WINDOW_SIZE)); // Hack to make gui resize.
+        context.options_mut(|writer| writer.zoom_factor = self.ui_size);
     }
 
     fn remode (&mut self, context: &egui::Context, mode: InterfaceMode) {
@@ -156,7 +138,7 @@ impl Default for Reshaper
             source: String::from("<date> <time>: <systolic>/<diastolic> <pulse>"),
             target: String::from("<date>,<time>,<systolic>,<diastolic>,<pulse>"),
             data: String::new(),
-            ui_size: InterfaceSize::Small,
+            ui_size: 1.3,
             ui_mode: InterfaceMode::Dark
         }
     }
@@ -172,7 +154,7 @@ impl App for Reshaper
         let source_is_valid = self.valid_source();
         let target_is_valid = self.valid_target();
         context.style_mut(|writer| writer.spacing.item_spacing = egui::Vec2::new(16.0, 8.0));
-        egui::TopBottomPanel::top("").frame(self.get_frame()).exact_height(180.0).resizable(false).show(context, |ui| {
+        egui::TopBottomPanel::top("").frame(self.get_frame()).exact_height(160.0).resizable(false).show(context, |ui| {
             ui.with_layout(egui::Layout::top_down_justified(egui::Align::LEFT), |ui| {
                 ui.label(egui::RichText::new("SOURCE TEMPLATE").small().weak());
                 if ui.add(ErrorField::new(&mut self.source, source_is_valid)).lost_focus() {
@@ -191,6 +173,13 @@ impl App for Reshaper
         egui::TopBottomPanel::bottom("").frame(self.get_frame()).exact_height(90.0).resizable(false).show(context, |ui| {
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
+                    ui.label(egui::RichText::new("TEXT SIZE").small().weak());
+                    if ui.add(egui::Slider::new(&mut self.ui_size, 1.0..=2.0)).changed() {
+                        self.resize(ui.ctx());
+                    };
+                });
+                ui.add_space(24.0);
+                ui.vertical(|ui| {
                     ui.label(egui::RichText::new("DARK MODE").small().weak());
                     if ui.add(Switch::new(InterfaceMode::Dark == self.ui_mode)).clicked() {
                         match self.ui_mode {
@@ -198,22 +187,6 @@ impl App for Reshaper
                             InterfaceMode::Light => self.remode(ui.ctx(), InterfaceMode::Dark)
                         }
                     };
-                });
-                ui.add_space(24.0);
-                ui.vertical(|ui| {
-                    ui.label(egui::RichText::new("TEXT SIZE").small().weak());
-                    ui.horizontal(|ui| {
-                        // TODO: Change label button to single slider for adjusting GUI size.
-                        if ui.selectable_label(self.ui_size == InterfaceSize::Small,  "small" ).highlight().clicked() {
-                            self.resize(ui.ctx(), InterfaceSize::Small);
-                        };
-                        if ui.selectable_label(self.ui_size == InterfaceSize::Medium, "medium").highlight().clicked() {
-                            self.resize(ui.ctx(), InterfaceSize::Medium);
-                        };
-                        if ui.selectable_label(self.ui_size == InterfaceSize::Large,  "large" ).highlight().clicked() {
-                            self.resize(ui.ctx(), InterfaceSize::Large);
-                        };
-                    });
                 });
             });
         });
