@@ -1,15 +1,19 @@
 /*
 
-Template-based parsing and transforming of a text file.
+Simple template-based parsing and transforming of a text file.
 
 Input format description markup:
-<date=iso8601date> <time=M|K>: <systolic=u8>/<diastolic=u8> <pulse=u8>
+    <date> <time>: <systolic>/<diastolic> <pulse>
+
+Possible extension to this could be:
+    <date=iso8601date> <time=M|K>: <systolic=u8>/<diastolic=u8> <pulse=u8>
+So that expression would be possible in the output.
+
+Output format example:
+    <date>;<time>;<systolic>;<diastolic>;<pulse>
+
 
 Blank means "one or more white space characters".
-
-<query> :: <queryExpression>[,<queryExpression>...]
-<queryExpression> :: <nameOfVariable> {{eq|lt|gt} <simpleLiteral> | in <sequenceLiteral>}
-<sequenceLiteral> :: <simpleLiteral>|<simpleLiteral>|... // ("|" avser literal)
 
 */
 
@@ -21,6 +25,7 @@ Blank means "one or more white space characters".
 #![deny(clippy::panic)]
 #![deny(unused_must_use)]
 
+use regex::Regex;
 use eframe::egui;
 use eframe:: { 
     App, 
@@ -56,12 +61,13 @@ struct Reshaper
 impl Reshaper 
 {
     fn new (context: &eframe::CreationContext<'_>) -> Self {
-        let cc: Reshaper = if let Some(ps) = context.storage { eframe::get_value(ps, eframe::APP_KEY).unwrap_or_default() } else { Reshaper::default() };
+        let object = if let Some(ps) = context.storage { eframe::get_value(ps, eframe::APP_KEY).unwrap_or_default() } else { Reshaper::default() };
         Self::set_fonts(&context.egui_ctx);
-        Self::set_style(&context.egui_ctx, cc.ui_mode);
-        cc
+        Self::set_style(&context.egui_ctx, object.ui_mode);
+        object
     }
 
+    // Static method, used in new.
     fn set_fonts (context: &egui::Context) {
         let fontname = "Sans Font";
         let mut font = egui::FontDefinitions::default();
@@ -71,54 +77,42 @@ impl Reshaper
             context.set_fonts(font);
         };
     }
-    
+
+    // Static method, used in new.
     fn set_style (context: &egui::Context, mode: InterfaceMode) {
-        let mut vs: egui::Visuals;
+        // Use context.style().visuals.dark_mode instead of own tracking through InterfaceMode?
+        let mut visuals: egui::Visuals;
         match mode {
             InterfaceMode::Dark  => {
                 context.set_theme(egui::Theme::Dark);
-                vs = egui::Visuals::dark();
-                vs.override_text_color = Option::Some(egui::Color32::from_gray(255));
+                visuals = egui::Visuals::dark();
+                visuals.override_text_color = Option::Some(egui::Color32::from_gray(255));
             },
             InterfaceMode::Light => {
                 context.set_theme(egui::Theme::Light);
-                vs = egui::Visuals::light();
-                vs.override_text_color = Option::Some(egui::Color32::from_gray(0));
+                visuals = egui::Visuals::light();
+                visuals.override_text_color = Option::Some(egui::Color32::from_gray(0));
             }
         }
-        vs.widgets.active.bg_fill = ACCENT_COLOR;
-        vs.widgets.noninteractive.bg_fill = ACCENT_COLOR;
-        vs.selection.bg_fill = ACCENT_COLOR.gamma_multiply(0.6);
-        vs.widgets.hovered.bg_fill = ACCENT_COLOR;
-        vs.widgets.hovered.weak_bg_fill = ACCENT_COLOR.gamma_multiply(0.1);
-        vs.slider_trailing_fill = true;
-        context.set_visuals(vs);
-    
+        visuals.widgets.active.bg_fill = ACCENT_COLOR;
+        visuals.widgets.noninteractive.bg_fill = ACCENT_COLOR;
+        visuals.selection.bg_fill = ACCENT_COLOR.gamma_multiply(0.6);
+        visuals.widgets.hovered.bg_fill = ACCENT_COLOR;
+        // visuals.widgets.hovered.weak_bg_fill = ACCENT_COLOR.gamma_multiply(0.1);
+        visuals.slider_trailing_fill = true;
+        context.set_visuals(visuals);
     }
     
     fn get_frame (&mut self) -> egui::Frame {
-        let cb = match self.ui_mode {
+        let color = match self.ui_mode {
             InterfaceMode::Dark  => egui::Color32::from_rgb( 15,  20,  15),
             InterfaceMode::Light => egui::Color32::from_rgb(245, 250, 245)
         };
         egui::Frame {
             inner_margin: egui::Margin::same(24),
-            fill: cb,
+            fill: color,
             ..Default::default()
         }
-    }
-
-    fn resize (&mut self, context: &egui::Context) {
-        // context.set_zoom_factor(zf); // Strange things happen when zoom is set through method.
-        context.options_mut(|writer| writer.zoom_factor = self.ui_size);
-    }
-
-    fn remode (&mut self, context: &egui::Context, mode: InterfaceMode) {
-        if  self.ui_mode == mode {
-            return;
-        }
-        self.ui_mode = mode;
-        Self::set_style(context, mode);
     }
 
     fn valid_source (&self) -> bool {
@@ -175,7 +169,7 @@ impl App for Reshaper
                 ui.vertical(|ui| {
                     ui.label(egui::RichText::new("TEXT SIZE").small().weak());
                     if ui.add(egui::Slider::new(&mut self.ui_size, 1.0..=2.0)).changed() {
-                        self.resize(ui.ctx());
+                        context.set_zoom_factor(self.ui_size); 
                     };
                 });
                 ui.add_space(24.0);
@@ -183,14 +177,21 @@ impl App for Reshaper
                     ui.label(egui::RichText::new("DARK MODE").small().weak());
                     if ui.add(Switch::new(InterfaceMode::Dark == self.ui_mode)).clicked() {
                         match self.ui_mode {
-                            InterfaceMode::Dark  => self.remode(ui.ctx(), InterfaceMode::Light),
-                            InterfaceMode::Light => self.remode(ui.ctx(), InterfaceMode::Dark)
+                            InterfaceMode::Dark  => { 
+                                self.ui_mode = InterfaceMode::Light;
+                                Self::set_style(ui.ctx(), InterfaceMode::Light);
+                            },
+                            InterfaceMode::Light => { 
+                                self.ui_mode = InterfaceMode::Dark;
+                                Self::set_style(ui.ctx(), InterfaceMode::Dark);
+                            }
                         }
                     };
                 });
             });
         });
     }
+    
 }
 
 fn main() -> eframe::Result {

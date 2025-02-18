@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 eframe = { version = "0.31.0", default-features = false, features = ["glow", "persistence"] }
 serde  = { version = "1.0.217" }
+regex  = "1.11.1"
 
 [build-dependencies]
 winresource = "0.1.19"
