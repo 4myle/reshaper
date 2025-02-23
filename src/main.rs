@@ -48,33 +48,84 @@ enum InterfaceMode
     Light
 }
 
+// Implement data as Vec<Row>, where Row is struct with data: String and part: Vec<&str> (or [&str]?).
+
+struct Row
+{
+    data: String,
+    part: Vec<*const str>
+}
+
+impl Row
+{
+    fn new (data: String, part: Vec<*const str>) -> Self {
+        Self { 
+            data, 
+            part 
+        }
+    }
+}
+
 #[derive(serde::Deserialize, serde::Serialize)]
-struct Reshaper 
+struct Reshaper
 {
     source: String,
     target: String,
-    data: String,
     ui_size: f32,
-    ui_mode: InterfaceMode
+    ui_mode: InterfaceMode,
+
+    #[serde(skip)]
+    data: Vec<Row>
 }
 
-impl Reshaper 
+impl Default for Reshaper
+{
+    fn default() -> Self {
+        Self {
+            source: String::from("<date> <time>: <systolic>/<diastolic> <pulse>"),
+            target: String::from("<date>,<pulse>,<systolic>,<diastolic>"),
+            data: Vec::new(),
+            ui_size: 1.2,
+            ui_mode: InterfaceMode::Dark
+        }
+    }
+}
+
+impl Reshaper
 {
     fn new (context: &eframe::CreationContext<'_>) -> Self {
         let object = if let Some(ps) = context.storage { eframe::get_value(ps, eframe::APP_KEY).unwrap_or_default() } else { Reshaper::default() };
         Self::set_fonts(&context.egui_ctx);
         Self::set_style(&context.egui_ctx, object.ui_mode);
+        context.egui_ctx.set_zoom_factor(object.ui_size);
         object
     }
 
     // Static method, used in new.
     fn set_fonts (context: &egui::Context) {
-        let fontname = "Sans Font";
-        let mut font = egui::FontDefinitions::default();
-        font.font_data.insert(fontname.to_string(), std::sync::Arc::new(egui::FontData::from_static(include_bytes!("../assets/SairaSemiCondensed-Regular.ttf"))));
-        if let Some(p) = font.families.get_mut(&egui::FontFamily::Proportional) {
-            p.insert(0, fontname.to_string());
-            context.set_fonts(font);
+        let textfont = "Sans Font";
+        let iconfont = "Icons";
+        let mut fonts = egui::FontDefinitions::default();
+        fonts
+            .font_data
+            .insert(
+                textfont.to_string(), 
+                std::sync::Arc::new(egui::FontData::from_static(include_bytes!("../assets/SairaSemiCondensed-Regular.ttf")))
+            );
+        fonts
+            .font_data
+            .insert(
+                iconfont.to_string(), 
+                std::sync::Arc::new(egui::FontData::from_static(include_bytes!("../assets/MaterialIconsOutlined-Regular.otf"))
+                    .tweak(egui::FontTweak { 
+                        scale: 1.1, 
+                        ..Default::default() 
+                    }
+            )));
+        if let Some(p) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
+            p.insert(0, textfont.to_string());
+            p.insert(1, iconfont.to_string());
+            context.set_fonts(fonts);
         };
     }
 
@@ -86,19 +137,19 @@ impl Reshaper
             InterfaceMode::Dark  => {
                 context.set_theme(egui::Theme::Dark);
                 visuals = egui::Visuals::dark();
-                visuals.override_text_color = Option::Some(egui::Color32::from_gray(255));
+                visuals.override_text_color = Some(egui::Color32::WHITE);
             },
             InterfaceMode::Light => {
                 context.set_theme(egui::Theme::Light);
                 visuals = egui::Visuals::light();
-                visuals.override_text_color = Option::Some(egui::Color32::from_gray(0));
+                visuals.override_text_color = Some(egui::Color32::BLACK);
             }
         }
         visuals.widgets.active.bg_fill = ACCENT_COLOR;
         visuals.widgets.noninteractive.bg_fill = ACCENT_COLOR;
-        visuals.selection.bg_fill = ACCENT_COLOR.gamma_multiply(0.6);
         visuals.widgets.hovered.bg_fill = ACCENT_COLOR;
-        // visuals.widgets.hovered.weak_bg_fill = ACCENT_COLOR.gamma_multiply(0.1);
+        visuals.selection.stroke.color  = ACCENT_COLOR; 
+        visuals.selection.bg_fill = ACCENT_COLOR.gamma_multiply(0.35);
         visuals.slider_trailing_fill = true;
         context.set_visuals(visuals);
     }
@@ -116,6 +167,7 @@ impl Reshaper
     }
 
     fn valid_source (&self) -> bool {
+        let _re = Regex::new(r"Hello (?<name>\w+)!");
         !self.source.is_empty()
     }
 
@@ -123,22 +175,58 @@ impl Reshaper
         !self.target.is_empty()
     }
 
-}
+    fn create_table (&self, ui: &mut egui::Ui, reset: bool) {
+        ui.style_mut().spacing.item_spacing = egui::Vec2::new(16.0, 0.0);
+        let builder = egui_extras::TableBuilder::new(ui)
+            .sense(egui::Sense::click())
+            .cell_layout(egui::Layout::left_to_right(egui::Align::TOP))
+            .column(egui_extras::Column::auto())
+            .column(egui_extras::Column::auto())
+            .column(egui_extras::Column::auto())
+            .column(egui_extras::Column::remainder());
+            if reset {
+                builder.reset();
+            }
+            builder.header(24.0, |mut header| {
+                header.col(|ui| {
+                    ui.horizontal(|ui| {
+                        ui.strong("date");
+                        ui.button("\u{e316}").clicked();
+                    });
+                });
+                header.col(|ui| {
+                    ui.strong("pulse");
+                });
+                header.col(|ui| {
+                    ui.strong("systolic");
+                });
+                header.col(|ui| {
+                    ui.strong("diastolic");
+                });
+            })
+            .body(|body| {
+                body.rows(20.0, 100, |mut row| {
+                    row.set_selected(row.index() == 7);
+                    row.col(|ui| {
+                        if self.data.is_empty() { ui.label("2025-02-22") } else { ui.strong("2025-02-22") };
+                    });
+                    row.col(|ui| {
+                        ui.label("70");
+                    });
+                    row.col(|ui| {
+                        ui.label("128");
+                    });
+                    row.col(|ui| {
+                        ui.label("75");
+                    });
+                });
+            });
 
-impl Default for Reshaper 
-{
-    fn default() -> Self {
-        Self {
-            source: String::from("<date> <time>: <systolic>/<diastolic> <pulse>"),
-            target: String::from("<date>,<time>,<systolic>,<diastolic>,<pulse>"),
-            data: String::new(),
-            ui_size: 1.3,
-            ui_mode: InterfaceMode::Dark
-        }
     }
+
 }
 
-impl App for Reshaper 
+impl App for Reshaper
 {
     fn save (&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, eframe::APP_KEY, self);
@@ -147,29 +235,35 @@ impl App for Reshaper
     fn update (&mut self, context: &egui::Context, _frame: &mut Frame) {
         let source_is_valid = self.valid_source();
         let target_is_valid = self.valid_target();
-        context.style_mut(|writer| writer.spacing.item_spacing = egui::Vec2::new(16.0, 8.0));
-        egui::TopBottomPanel::top("").frame(self.get_frame()).exact_height(160.0).resizable(false).show(context, |ui| {
+        context.style_mut(|writer| {
+            writer.spacing.item_spacing = egui::Vec2::new(12.0, 8.0);
+            writer.spacing.button_padding = egui::Vec2::new(2.0, 0.0);
+        });
+        egui::TopBottomPanel::top("Templates").frame(self.get_frame()).resizable(false).show(context, |ui| {
+            ui.horizontal(|ui| {
+                ui.style_mut().spacing.button_padding = egui::Vec2::new(8.0, 2.0);
+                if ui.button("\u{eaf3}  Open file").clicked() {
+                };
+                if ui.button("\u{e171}  Save file").clicked() {
+                };
+            });
+            ui.add_space(12.0);
             ui.with_layout(egui::Layout::top_down_justified(egui::Align::LEFT), |ui| {
                 ui.label(egui::RichText::new("SOURCE TEMPLATE").small().weak());
                 if ui.add(ErrorField::new(&mut self.source, source_is_valid)).lost_focus() {
-                    // self.redo_parts(); 
                 };
                 ui.add_space(12.0);
                 ui.label(egui::RichText::new("TARGET TEMPLATE").small().weak());
                 if ui.add(ErrorField::new(&mut self.target, target_is_valid)).lost_focus() {
-                    // self.redo_parts(); 
                 };
             });
         });
-        egui::CentralPanel::default().frame(self.get_frame()).show(context, |ui| {
-            ui.label(egui::RichText::new("(TABLE COMING ...)").small().weak());
-        });
-        egui::TopBottomPanel::bottom("").frame(self.get_frame()).exact_height(90.0).resizable(false).show(context, |ui| {
+        egui::TopBottomPanel::bottom("Settings").frame(self.get_frame()).resizable(false).show(context, |ui| {
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
                     ui.label(egui::RichText::new("TEXT SIZE").small().weak());
-                    if ui.add(egui::Slider::new(&mut self.ui_size, 1.0..=2.0)).changed() {
-                        context.set_zoom_factor(self.ui_size); 
+                    if ui.add(egui::Slider::new(&mut self.ui_size, 0.90..=1.75)).changed() {
+                        context.set_zoom_factor(self.ui_size);
                     };
                 });
                 ui.add_space(24.0);
@@ -190,8 +284,16 @@ impl App for Reshaper
                 });
             });
         });
+        // Must be last to size to be calculated correctly.
+        egui::CentralPanel::default().frame(self.get_frame()).show(context, |ui| { 
+            if self.data.is_empty() {
+                ui.add_sized(ui.available_size(), egui::Label::new(egui::RichText::new("(drop file here)").heading().italics().weak()));
+            } else {
+                self.create_table(ui, false);
+            }
+        });
     }
-    
+
 }
 
 fn main() -> eframe::Result {

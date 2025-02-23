@@ -11,11 +11,11 @@ Blank here means "one or more white space characters".
 
 Output markup example:
 ```
-<date>;<pulse>;<systolic>;<diastolic>
+<date>,<pulse>,<systolic>,<diastolic>
 ```
 As for now, simple use cases like this are the only ones supported.
 
-## Ideas
+## Some ideas
 
 Possible extension to markup could be support for type and conversions. For example:
 ```
