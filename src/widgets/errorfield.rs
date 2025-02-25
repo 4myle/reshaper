@@ -1,9 +1,8 @@
+/*
 
-#![deny(clippy::pedantic)]
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![deny(clippy::panic)]
-#![deny(unused_must_use)]
+Extended egui::TextEdit::singleline that show a red frame when the `valid` parameter is true. 
+
+*/
 
 use eframe::egui;
 use eframe::egui::Widget;

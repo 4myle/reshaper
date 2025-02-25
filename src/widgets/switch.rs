@@ -1,9 +1,8 @@
+/*
 
-#![deny(clippy::pedantic)]
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![deny(clippy::panic)]
-#![deny(unused_must_use)]
+A simple switch widget (based on an example from egui).
+
+*/
 
 use eframe::egui;
 use eframe::egui::Widget;

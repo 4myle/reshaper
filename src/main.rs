@@ -3,15 +3,14 @@
 Simple template-based parsing and transforming of a text file.
 
 Input format description markup:
-    <date> <time>: <systolic>/<diastolic> <pulse>
+    `<date> <time>: <systolic>/<diastolic> <pulse>`
 
 Possible extension to this could be:
-    <date=iso8601date> <time=M|K>: <systolic=u8>/<diastolic=u8> <pulse=u8>
+    `<date=iso8601date> <time=M|K>: <systolic=u8>/<diastolic=u8> <pulse=u8>`
 So that expression would be possible in the output.
 
 Output format example:
-    <date>;<time>;<systolic>;<diastolic>;<pulse>
-
+    `<date>;<time>;<systolic>;<diastolic>;<pulse>`
 
 Blank means "one or more white space characters".
 
@@ -19,11 +18,11 @@ Blank means "one or more white space characters".
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
-#![deny(clippy::pedantic)]
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![deny(clippy::panic)]
-#![deny(unused_must_use)]
+// #![deny(clippy::pedantic)]
+// #![deny(clippy::unwrap_used)]
+// #![deny(clippy::expect_used)]
+// #![deny(clippy::panic)]
+// #![deny(unused_must_use)]
 
 use regex::Regex;
 use eframe::egui;
@@ -32,11 +31,12 @@ use eframe:: {
     Frame
 };
 
-mod switch;
-mod errorfield;
+mod widgets;
+use crate::widgets::errorfield::ErrorField;
+use crate::widgets::switch::Switch;
 
-use switch::Switch;
-use errorfield::ErrorField;
+mod models;
+use crate::models::row::Row;
 
 const WINDOW_SIZE:  egui::Vec2 = egui::Vec2::new(640.0, 480.0);
 const ACCENT_COLOR: egui::Color32 = egui::Color32::from_rgb(0, 153, 127); // HSL(170,100,30)
@@ -49,22 +49,6 @@ enum InterfaceMode
 }
 
 // Implement data as Vec<Row>, where Row is struct with data: String and part: Vec<&str> (or [&str]?).
-
-struct Row
-{
-    data: String,
-    part: Vec<*const str>
-}
-
-impl Row
-{
-    fn new (data: String, part: Vec<*const str>) -> Self {
-        Self { 
-            data, 
-            part 
-        }
-    }
-}
 
 #[derive(serde::Deserialize, serde::Serialize)]
 struct Reshaper
@@ -84,9 +68,9 @@ impl Default for Reshaper
         Self {
             source: String::from("<date> <time>: <systolic>/<diastolic> <pulse>"),
             target: String::from("<date>,<pulse>,<systolic>,<diastolic>"),
-            data: Vec::new(),
             ui_size: 1.2,
-            ui_mode: InterfaceMode::Dark
+            ui_mode: InterfaceMode::Dark,
+            data: Vec::new()
         }
     }
 }
@@ -94,10 +78,12 @@ impl Default for Reshaper
 impl Reshaper
 {
     fn new (context: &eframe::CreationContext<'_>) -> Self {
-        let object = if let Some(ps) = context.storage { eframe::get_value(ps, eframe::APP_KEY).unwrap_or_default() } else { Reshaper::default() };
+        let mut object = if let Some(ps) = context.storage { eframe::get_value(ps, eframe::APP_KEY).unwrap_or_default() } else { Reshaper::default() };
         Self::set_fonts(&context.egui_ctx);
         Self::set_style(&context.egui_ctx, object.ui_mode);
         context.egui_ctx.set_zoom_factor(object.ui_size);
+        object.data.insert(0, Row::new(String::from("2024-10-25 M: 131/79 63"))); //TODO: remove!?
+        object.data[0].add(0, 1); //TODO: remove!?
         object
     }
 
@@ -208,7 +194,7 @@ impl Reshaper
                 body.rows(20.0, 100, |mut row| {
                     row.set_selected(row.index() == 7);
                     row.col(|ui| {
-                        if self.data.is_empty() { ui.label("2025-02-22") } else { ui.strong("2025-02-22") };
+                        if self.data[0].is_empty() { ui.label("2025-02-22") } else { ui.label("2025-02-21") }; // To supress warning.
                     });
                     row.col(|ui| {
                         ui.label("70");
@@ -242,7 +228,7 @@ impl App for Reshaper
         egui::TopBottomPanel::top("Templates").frame(self.get_frame()).resizable(false).show(context, |ui| {
             ui.horizontal(|ui| {
                 ui.style_mut().spacing.button_padding = egui::Vec2::new(8.0, 2.0);
-                if ui.button("\u{eaf3}  Open file").clicked() {
+                if ui.button("\u{eaf3}  Load file").clicked() {
                 };
                 if ui.button("\u{e171}  Save file").clicked() {
                 };
@@ -286,7 +272,7 @@ impl App for Reshaper
         });
         // Must be last to size to be calculated correctly.
         egui::CentralPanel::default().frame(self.get_frame()).show(context, |ui| { 
-            if self.data.is_empty() {
+            if self.data[0].is_empty() {
                 ui.add_sized(ui.available_size(), egui::Label::new(egui::RichText::new("(drop file here)").heading().italics().weak()));
             } else {
                 self.create_table(ui, false);

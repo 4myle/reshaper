@@ -4,6 +4,6 @@ fn main() {
     {
         let mut res = winresource::WindowsResource::new();
         res.set_icon("assets/Reshaper.ico");
-        res.compile().unwrap();
+        res.compile().unwrap_or(());
     }
 }

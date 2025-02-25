@@ -30,3 +30,10 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = "symbols"
+
+[lints.clippy]
+pedantic = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+used_must_use = "deny"
+panic = "deny"
