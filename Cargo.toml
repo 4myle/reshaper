@@ -33,6 +33,7 @@ strip = "symbols"
 
 [lints.clippy]
 pedantic = "deny"
+unsafe_code = "deny"
 unwrap_used = "deny"
 expect_used = "deny"
 used_must_use = "deny"

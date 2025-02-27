@@ -18,12 +18,6 @@ Blank means "one or more white space characters".
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
-// #![deny(clippy::pedantic)]
-// #![deny(clippy::unwrap_used)]
-// #![deny(clippy::expect_used)]
-// #![deny(clippy::panic)]
-// #![deny(unused_must_use)]
-
 use regex::Regex;
 use eframe::egui;
 use eframe:: { 
@@ -37,6 +31,8 @@ use crate::widgets::switch::Switch;
 
 mod models;
 use crate::models::row::Row;
+// use crate::models::table::Table;
+
 
 const WINDOW_SIZE:  egui::Vec2 = egui::Vec2::new(640.0, 480.0);
 const ACCENT_COLOR: egui::Color32 = egui::Color32::from_rgb(0, 153, 127); // HSL(170,100,30)
@@ -60,6 +56,7 @@ struct Reshaper
 
     #[serde(skip)]
     data: Vec<Row>
+    // data: Table
 }
 
 impl Default for Reshaper
@@ -71,6 +68,7 @@ impl Default for Reshaper
             ui_size: 1.2,
             ui_mode: InterfaceMode::Dark,
             data: Vec::new()
+            // data: Table::new()
         }
     }
 }
@@ -78,12 +76,10 @@ impl Default for Reshaper
 impl Reshaper
 {
     fn new (context: &eframe::CreationContext<'_>) -> Self {
-        let mut object = if let Some(ps) = context.storage { eframe::get_value(ps, eframe::APP_KEY).unwrap_or_default() } else { Reshaper::default() };
+        let object = if let Some(ps) = context.storage { eframe::get_value(ps, eframe::APP_KEY).unwrap_or_default() } else { Reshaper::default() };
         Self::set_fonts(&context.egui_ctx);
         Self::set_style(&context.egui_ctx, object.ui_mode);
         context.egui_ctx.set_zoom_factor(object.ui_size);
-        object.data.insert(0, Row::new(String::from("2024-10-25 M: 131/79 63"))); //TODO: remove!?
-        object.data[0].add(0, 1); //TODO: remove!?
         object
     }
 
@@ -194,7 +190,15 @@ impl Reshaper
                 body.rows(20.0, 100, |mut row| {
                     row.set_selected(row.index() == 7);
                     row.col(|ui| {
-                        if self.data[0].is_empty() { ui.label("2025-02-22") } else { ui.label("2025-02-21") }; // To supress warning.
+                        // if self.data[0].is_empty() { ui.label("2025-02-22") } else { ui.label("2025-02-21") }; // To supress warning.
+                        if !self.data.is_empty() {
+                            if let Some(text) = self.data[0].get(0) {
+                                ui.label(text);
+                            }
+                            // if let Some(text) = self.data.get(0).and_then(|r| r.get(0)) { //TODO: implement properly.
+                            //     ui.label(text);
+                            // }
+                        };
                     });
                     row.col(|ui| {
                         ui.label("70");
@@ -226,14 +230,6 @@ impl App for Reshaper
             writer.spacing.button_padding = egui::Vec2::new(2.0, 0.0);
         });
         egui::TopBottomPanel::top("Templates").frame(self.get_frame()).resizable(false).show(context, |ui| {
-            ui.horizontal(|ui| {
-                ui.style_mut().spacing.button_padding = egui::Vec2::new(8.0, 2.0);
-                if ui.button("\u{eaf3}  Load file").clicked() {
-                };
-                if ui.button("\u{e171}  Save file").clicked() {
-                };
-            });
-            ui.add_space(12.0);
             ui.with_layout(egui::Layout::top_down_justified(egui::Align::LEFT), |ui| {
                 ui.label(egui::RichText::new("SOURCE TEMPLATE").small().weak());
                 if ui.add(ErrorField::new(&mut self.source, source_is_valid)).lost_focus() {
@@ -268,11 +264,28 @@ impl App for Reshaper
                         }
                     };
                 });
+                ui.add_space(48.0);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Max), |ui| {
+                    ui.style_mut().spacing.button_padding = egui::Vec2::new(8.0, 2.0);
+                    if ui.button("\u{e171}  Hide table").clicked() {
+                        //TODO: temporary test.
+                        // self.data = Table::new();
+                        self.data = Vec::new();
+                    };
+                    if ui.button("\u{eaf3}  Show table").clicked() {
+                        //TODO: temporary test.
+                        self.data.push(Row::new(String::from("\"2024-10-25\" M: 131/79 63")));
+                        self.data[0].add(1,11);
+                        // if let Some(r) = self.data.add(String::from("\"2024-10-25\" M: 131/79 63")) {
+                        //     r.add(1, 11);
+                        // }
+                    };
+                });
             });
         });
-        // Must be last to size to be calculated correctly.
+        // Must be last for remaining size to be calculated correctly.
         egui::CentralPanel::default().frame(self.get_frame()).show(context, |ui| { 
-            if self.data[0].is_empty() {
+            if self.data.is_empty() {
                 ui.add_sized(ui.available_size(), egui::Label::new(egui::RichText::new("(drop file here)").heading().italics().weak()));
             } else {
                 self.create_table(ui, false);
