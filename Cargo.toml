@@ -3,7 +3,7 @@ description = "Template-based parsing and transforming of a text file"
 name = "reshaper"
 authors = ["Roger Salomonsson <medicorab@gmail.com>"]
 version = "1.0.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 eframe = { version = "0.31.0", default-features = false, features = ["glow", "persistence"] }

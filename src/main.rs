@@ -31,7 +31,6 @@ use crate::widgets::switch::Switch;
 
 mod models;
 use crate::models::row::Row;
-// use crate::models::table::Table;
 
 
 const WINDOW_SIZE:  egui::Vec2 = egui::Vec2::new(640.0, 480.0);
@@ -53,10 +52,10 @@ struct Reshaper
     target: String,
     ui_size: f32,
     ui_mode: InterfaceMode,
+    file: String,
 
     #[serde(skip)]
     data: Vec<Row>
-    // data: Table
 }
 
 impl Default for Reshaper
@@ -67,8 +66,8 @@ impl Default for Reshaper
             target: String::from("<date>,<pulse>,<systolic>,<diastolic>"),
             ui_size: 1.2,
             ui_mode: InterfaceMode::Dark,
+            file: String::new(), //egui::DroppedFile::default(),
             data: Vec::new()
-            // data: Table::new()
         }
     }
 }
@@ -113,7 +112,7 @@ impl Reshaper
 
     // Static method, used in new.
     fn set_style (context: &egui::Context, mode: InterfaceMode) {
-        // Use context.style().visuals.dark_mode instead of own tracking through InterfaceMode?
+        // Should be possile to use context.style().visuals.dark_mode instead of own tracking through InterfaceMode?
         let mut visuals: egui::Visuals;
         match mode {
             InterfaceMode::Dark  => {
@@ -190,14 +189,10 @@ impl Reshaper
                 body.rows(20.0, 100, |mut row| {
                     row.set_selected(row.index() == 7);
                     row.col(|ui| {
-                        // if self.data[0].is_empty() { ui.label("2025-02-22") } else { ui.label("2025-02-21") }; // To supress warning.
                         if !self.data.is_empty() {
                             if let Some(text) = self.data[0].get(0) {
                                 ui.label(text);
                             }
-                            // if let Some(text) = self.data.get(0).and_then(|r| r.get(0)) { //TODO: implement properly.
-                            //     ui.label(text);
-                            // }
                         };
                     });
                     row.col(|ui| {
@@ -238,6 +233,9 @@ impl App for Reshaper
                 ui.label(egui::RichText::new("TARGET TEMPLATE").small().weak());
                 if ui.add(ErrorField::new(&mut self.target, target_is_valid)).lost_focus() {
                 };
+                if !self.file.is_empty() {
+                    ui.label(self.file.clone());
+                }
             });
         });
         egui::TopBottomPanel::bottom("Settings").frame(self.get_frame()).resizable(false).show(context, |ui| {
@@ -264,27 +262,35 @@ impl App for Reshaper
                         }
                     };
                 });
+                //TODO only for testing(?).
                 ui.add_space(48.0);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Max), |ui| {
                     ui.style_mut().spacing.button_padding = egui::Vec2::new(8.0, 2.0);
-                    if ui.button("\u{e171}  Hide table").clicked() {
-                        //TODO: temporary test.
-                        // self.data = Table::new();
+                    if ui.button("\u{e171}  Clear data").clicked() {
+                        //TODO: real implementation.
                         self.data = Vec::new();
+                        self.file = String::new();
                     };
-                    if ui.button("\u{eaf3}  Show table").clicked() {
-                        //TODO: temporary test.
+                    if ui.button("\u{eaf3}  Load data").clicked() {
+                        //TODO: real implementation.
                         self.data.push(Row::new(String::from("\"2024-10-25\" M: 131/79 63")));
                         self.data[0].add(1,11);
-                        // if let Some(r) = self.data.add(String::from("\"2024-10-25\" M: 131/79 63")) {
-                        //     r.add(1, 11);
-                        // }
                     };
                 });
             });
         });
         // Must be last for remaining size to be calculated correctly.
-        egui::CentralPanel::default().frame(self.get_frame()).show(context, |ui| { 
+        egui::CentralPanel::default().frame(self.get_frame()).show(context, |ui| {
+            if context.input(|input| !input.raw.hovered_files.is_empty()) {
+                ui.painter().rect(ui.min_rect(), 0.0, ui.style().visuals.selection.bg_fill, egui::Stroke::NONE, egui::StrokeKind::Inside);
+            } 
+            context.input(|input| {
+                if !input.raw.dropped_files.is_empty() {
+                    if let Some(path) = &input.raw.dropped_files[0].path {
+                        self.file = path.display().to_string();
+                    };
+                }
+            });
             if self.data.is_empty() {
                 ui.add_sized(ui.available_size(), egui::Label::new(egui::RichText::new("(drop file here)").heading().italics().weak()));
             } else {
