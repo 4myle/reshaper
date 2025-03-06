@@ -52,7 +52,7 @@ struct Reshaper
     target: String,
     ui_size: f32,
     ui_mode: InterfaceMode,
-    file: String,
+    path: String,
 
     #[serde(skip)]
     data: Vec<Row>
@@ -66,7 +66,7 @@ impl Default for Reshaper
             target: String::from("<date>,<pulse>,<systolic>,<diastolic>"),
             ui_size: 1.2,
             ui_mode: InterfaceMode::Dark,
-            file: String::new(), //egui::DroppedFile::default(),
+            path: String::new(),
             data: Vec::new()
         }
     }
@@ -169,6 +169,7 @@ impl Reshaper
                 builder.reset();
             }
             builder.header(24.0, |mut header| {
+                // let cc = self.data[0].count();
                 header.col(|ui| {
                     ui.horizontal(|ui| {
                         ui.strong("date");
@@ -186,14 +187,12 @@ impl Reshaper
                 });
             })
             .body(|body| {
-                body.rows(20.0, 100, |mut row| {
-                    row.set_selected(row.index() == 7);
+                body.rows(20.0, self.data.len(), |mut row| {
+                    let ir = row.index();
                     row.col(|ui| {
-                        if !self.data.is_empty() {
-                            if let Some(text) = self.data[0].get(0) {
-                                ui.label(text);
-                            }
-                        };
+                        if let Some(text) = self.data[ir].get(0) {
+                            ui.label(text);
+                        }
                     });
                     row.col(|ui| {
                         ui.label("70");
@@ -207,6 +206,22 @@ impl Reshaper
                 });
             });
 
+    }
+
+    // let row: Vec<String> = line.split(',').map(|s| s.trim().to_string()).collect();
+    fn load_file (&mut self, path: String) {
+        self.path = path;
+        self.data = Vec::new();
+        if let Ok(file) = std::fs::File::open(&self.path) {
+            let reader  = std::io::BufReader::new(file);
+            std::io::BufRead::lines(reader).for_each(|line| {
+                if let Ok(row) = line {
+                    let mut r = Row::new(row);
+                    r.add(0, 10); // Replace with parsed source template.
+                    self.data.push(r);
+                }
+            });
+        }
     }
 
 }
@@ -233,9 +248,9 @@ impl App for Reshaper
                 ui.label(egui::RichText::new("TARGET TEMPLATE").small().weak());
                 if ui.add(ErrorField::new(&mut self.target, target_is_valid)).lost_focus() {
                 };
-                if !self.file.is_empty() {
-                    ui.label(self.file.clone());
-                }
+                // if !self.path.is_empty() {
+                //     ui.label(self.path.clone());
+                // }
             });
         });
         egui::TopBottomPanel::bottom("Settings").frame(self.get_frame()).resizable(false).show(context, |ui| {
@@ -267,12 +282,10 @@ impl App for Reshaper
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Max), |ui| {
                     ui.style_mut().spacing.button_padding = egui::Vec2::new(8.0, 2.0);
                     if ui.button("\u{e171}  Clear data").clicked() {
-                        //TODO: real implementation.
                         self.data = Vec::new();
-                        self.file = String::new();
+                        self.path = String::new();
                     };
-                    if ui.button("\u{eaf3}  Load data").clicked() {
-                        //TODO: real implementation.
+                    if ui.button("\u{eaf3}  Load test data").clicked() {
                         self.data.push(Row::new(String::from("\"2024-10-25\" M: 131/79 63")));
                         self.data[0].add(1,11);
                     };
@@ -287,7 +300,7 @@ impl App for Reshaper
             context.input(|input| {
                 if !input.raw.dropped_files.is_empty() {
                     if let Some(path) = &input.raw.dropped_files[0].path {
-                        self.file = path.display().to_string();
+                        self.load_file(path.display().to_string());
                     };
                 }
             });

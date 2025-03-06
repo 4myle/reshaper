@@ -38,6 +38,13 @@ impl Row
         Some(&self.part[index])
     }
 
+    // pub fn count (&self) -> usize {
+    //     if self.data.is_empty() {
+    //         return 0;
+    //     }
+    //     self.part[0].len()
+    // }
+
     // pub fn is_empty (&self) -> bool {
     //     self.data.is_empty()
     // }
