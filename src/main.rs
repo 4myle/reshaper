@@ -18,7 +18,6 @@ Blank means "one or more white space characters".
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
-use regex::Regex;
 use eframe::egui;
 use eframe:: { 
     App, 
@@ -30,7 +29,8 @@ use crate::widgets::errorfield::ErrorField;
 use crate::widgets::switch::Switch;
 
 mod models;
-use crate::models::row::Row;
+use crate::models::table::Table;
+use crate::models::parser::Parser;
 
 
 const WINDOW_SIZE:  egui::Vec2 = egui::Vec2::new(640.0, 480.0);
@@ -55,19 +55,22 @@ struct Reshaper
     path: String,
 
     #[serde(skip)]
-    data: Vec<Row>
+    data: Table,
+    #[serde(skip)]
+    parser: Parser,
 }
 
 impl Default for Reshaper
 {
     fn default() -> Self {
         Self {
-            source: String::from("<date> <time>: <systolic>/<diastolic> <pulse>"),
-            target: String::from("<date>,<pulse>,<systolic>,<diastolic>"),
+            source: String::from("<date> <time>: <systolic>/<diastolic> <pulse>"),  // [0,1,2,3,4]
+            target: String::from("<date>,<pulse>,<systolic>,<diastolic>"),          // [0,4,2,3]
             ui_size: 1.2,
             ui_mode: InterfaceMode::Dark,
             path: String::new(),
-            data: Vec::new()
+            data: Table::new(),
+            parser: Parser::new()
         }
     }
 }
@@ -148,7 +151,6 @@ impl Reshaper
     }
 
     fn valid_source (&self) -> bool {
-        let _re = Regex::new(r"Hello (?<name>\w+)!");
         !self.source.is_empty()
     }
 
@@ -187,10 +189,18 @@ impl Reshaper
                 });
             })
             .body(|body| {
-                body.rows(20.0, self.data.len(), |mut row| {
+                // number_of_variables
+                // number_of_observations
+                // number_of_rows
+                // number_of_headers
+                body.rows(20.0, self.data.rows_total(), |mut row| {
+                    // for header in self.data.header_count() {
+                    //     self.data.get(row.index(), heading);
+                    // }
                     let ir = row.index();
+                    let ic = 0;
                     row.col(|ui| {
-                        if let Some(text) = self.data[ir].get(0) {
+                        if let Some(text) = self.data.get(ir, ic) {
                             ui.label(text);
                         }
                     });
@@ -211,14 +221,13 @@ impl Reshaper
     // let row: Vec<String> = line.split(',').map(|s| s.trim().to_string()).collect();
     fn load_file (&mut self, path: String) {
         self.path = path;
-        self.data = Vec::new();
+        self.data = Table::new();
         if let Ok(file) = std::fs::File::open(&self.path) {
             let reader  = std::io::BufReader::new(file);
             std::io::BufRead::lines(reader).for_each(|line| {
-                if let Ok(row) = line {
-                    let mut r = Row::new(row);
-                    r.add(0, 10); // Replace with parsed source template.
-                    self.data.push(r);
+                if let Ok(text) = line {
+                    // let mut r = Row::new(row);
+                    self.data.add(text).and_then(|r| r.add(0, 10)); //TODO: Replace parsing row using source template.
                 }
             });
         }
@@ -257,7 +266,7 @@ impl App for Reshaper
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
                     ui.label(egui::RichText::new("TEXT SIZE").small().weak());
-                    if ui.add(egui::Slider::new(&mut self.ui_size, 0.90..=1.75)).changed() {
+                    if ui.add(egui::Slider::new(&mut self.ui_size, 1.0..=1.7)).changed() {
                         context.set_zoom_factor(self.ui_size);
                     };
                 });
@@ -282,12 +291,12 @@ impl App for Reshaper
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Max), |ui| {
                     ui.style_mut().spacing.button_padding = egui::Vec2::new(8.0, 2.0);
                     if ui.button("\u{e171}  Clear data").clicked() {
-                        self.data = Vec::new();
+                        self.data = Table::new();
                         self.path = String::new();
                     };
                     if ui.button("\u{eaf3}  Load test data").clicked() {
-                        self.data.push(Row::new(String::from("\"2024-10-25\" M: 131/79 63")));
-                        self.data[0].add(1,11);
+                        self.parser.parse_source(&self.source);
+                        self.data.add(String::from("\"2024-10-25\" M: 131/79 63")).and_then(|s| s.add(1,11));
                     };
                 });
             });

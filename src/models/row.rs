@@ -31,11 +31,11 @@ impl Row
         Some(())
     }
 
-    pub fn get (&self, index: usize) -> Option<&str> {
+    pub fn get (&self, index: usize) -> &str { //TODO: cleaner with Option<&str>?
         if self.data.is_empty() || index > self.part.len() {
-            return None;
+            return "";
         }
-        Some(&self.part[index])
+        &self.part[index]
     }
 
     // pub fn count (&self) -> usize {
