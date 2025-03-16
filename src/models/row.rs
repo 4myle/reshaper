@@ -10,43 +10,32 @@ use std::rc::Rc;
 #[derive(Default)]
 pub struct Row
 {
-    data: String,
+    text: String,
     part: Vec<Rc<str>>
 }
 
 impl Row
 {
-    pub fn new (data: String) -> Self {
+    pub fn new (text: &str, width: usize) -> Self {
         Self { 
-            data, 
-            part: Vec::new()
+            text: text.to_string(), 
+            part: Vec::with_capacity(width)
         }
     }
 
     pub fn add (&mut self, start: usize, end: usize) -> Option<()> {
-        if self.data.is_empty() || start > end || end > self.data.len() {
+        if self.text.is_empty() || start > end || end > self.text.len() {
             return None;
         }
-        self.part.push(self.data[start..end].into());
+        self.part.push(self.text[start..end].into());
         Some(())
     }
 
-    pub fn get (&self, index: usize) -> &str { //TODO: cleaner with Option<&str>?
-        if self.data.is_empty() || index > self.part.len() {
-            return "";
+    pub fn get (&self, index: usize) -> Option<&str> {
+        if self.text.is_empty() || index > self.part.len() {
+            return None;
         }
-        &self.part[index]
+        Some(&self.part[index])
     }
-
-    // pub fn count (&self) -> usize {
-    //     if self.data.is_empty() {
-    //         return 0;
-    //     }
-    //     self.part[0].len()
-    // }
-
-    // pub fn is_empty (&self) -> bool {
-    //     self.data.is_empty()
-    // }
 
 }

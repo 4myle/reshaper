@@ -1,66 +1,101 @@
+/*
+source template:    <date> <time>: <systolic>/<diastolic> <pulse>
+source input:       2024-10-25 M: 131/79 63
+
+target template:    <date>,<pulse>,<systolic>,<diastolic>
+target produced:    2024-10-25,63,131,79
+*/
 
 use regex::Regex;
-use std::slice::Iter;
+// use std::slice::Iter;
 
-#[derive(Default)]
+// #[derive(Default)]
 pub struct Parser
 {
     variables: Vec<String>,
-    source_after: Vec<String>,
-    target_after: Vec<String>,
-    target_index: Vec<u16>
+    source_expression: Regex,
+    target_expression: Regex
+}
+
+impl Default for Parser {
+    fn default() -> Self {
+        Self { 
+            variables: Vec::default(), 
+            source_expression: Result::unwrap(Regex::new("")),
+            target_expression: Result::unwrap(Regex::new(""))
+        }
+    }
 }
 
 impl Parser
 {
     
     pub fn new () -> Self {
-        Self { 
-            variables: Vec::new(),
-            source_after: Vec::new(),
-            target_after: Vec::new(),
-            target_index: Vec::new()
+        Self::default()
+    }
+
+    // pub fn variables (&self) -> Iter<String> {
+    //     self.variables.iter()
+    // }
+
+    pub fn set_source (&mut self, text: &str) -> Result<&mut Self, &str> {
+        if text.is_empty() {
+            return Err("")
         }
-    }
-
-    pub fn variables (&self) -> Iter<String> {
-        self.variables.iter()
-    }
-
-    pub fn parse_source (&mut self, text: &str) -> bool {
-        let expression = Result::unwrap(Regex::new(r"<([^>]+)>|([^<>]+)"));
+        let extractor  = Result::unwrap(Regex::new(r"<([^>]+)>|([^<>]+)"));
+        let mut result = String::new();
         self.variables = Vec::new();
-        self.source_after = Vec::new();
-        for capture in expression.captures_iter(text) {
-            if let Some(tag) = capture.get(1) {
-                self.variables.push(tag.as_str().to_string());
-            } else if let Some(text) = capture.get(2) {
-                self.source_after.push(text.as_str().to_string());
+        for capture in extractor.captures_iter(text) {
+            if let Some(variable) = capture.get(1) {
+                result.push_str("(?P<");
+                result.push_str(variable.as_str());
+                result.push_str(">\\S+)");
+                self.variables.push(variable.as_str().to_string());
+            } else if let Some(delimiter) = capture.get(2) {
+                result.push_str(delimiter.as_str().replacen(' ', "\\s+", 1).as_str());
             }
         }
-        /*
-        Captures({0: 0..6/"<date>", 1: 1..5/"date", 2: None})
-        Captures({0: 7..13/"<time>", 1: 8..12/"time", 2: None})
-        Captures({0: 15..25/"<systolic>", 1: 16..24/"systolic", 2: None})
-        Captures({0: 26..37/"<diastolic>", 1: 27..36/"diastolic", 2: None})
-        Captures({0: 38..45/"<pulse>", 1: 39..44/"pulse", 2: None})
-        */
-        println!("{:?}", self.variables);
-        println!("{:?}", self.source_after);
-        self.target_after = Vec::new();
-        self.target_index = Vec::new();
-        true
-}
-
-    pub fn parse_target (&mut self, text: &str) -> bool {
-        let expression = Result::unwrap(Regex::new(r"<([^>]+)>|([^<>]+)"));
-        self.target_after = Vec::new();
-        self.target_index = Vec::new();
-        true
+        match Regex::new(&result) {
+            Ok (r) => self.source_expression = r,
+            Err(_) => return Err("Error during conversion")
+        }
+        if self.variables.is_empty() || self.variables.iter().any(String::is_empty) {
+            return Err("Syntax error in template");
+        }
+        Ok(self)
     }
 
-    // pub fn is_empty (&self) -> bool {
-    //     self.rows.is_empty()
-    // }
+    pub fn set_target (&mut self, text: &str) -> Result<&mut Self, &str> {
+        if text.is_empty() {
+            return Err("")
+        }
+        let extractor  = Result::unwrap(Regex::new(r"<([^>]+)>|([^<>]+)"));
+        let mut result = String::new();
+        //TODO: expression on the form "$1,$4,$3,$2"?
+        //TODO: implement.
+        // println!("{:?}", self.target_expression);
+        for capture in extractor.captures_iter(text) {
+            if let Some(_variable) = capture.get(1) {
+                result.push_str("$1");
+            } else if let Some(delimiter) = capture.get(2) {
+                result.push_str(delimiter.as_str());
+            }
+        }
+        self.target_expression = extractor;
+        if false {
+            return Err("REMOVE ME");
+        }
+        Ok(self)
+    }
+
+    pub fn split (&self, row: &str) -> Vec<(usize,usize)> {
+        let mut result: Vec<(usize,usize)> = Vec::new();
+        let mut slices = self.source_expression.capture_locations();
+        self.source_expression.captures_read(&mut slices, row);
+        for index in 1..slices.len() {
+            result.push(slices.get(index).unwrap_or_default());
+        }
+        result
+    }
 
 }

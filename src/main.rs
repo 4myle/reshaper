@@ -64,12 +64,12 @@ impl Default for Reshaper
 {
     fn default() -> Self {
         Self {
-            source: String::from("<date> <time>: <systolic>/<diastolic> <pulse>"),  // [0,1,2,3,4]
-            target: String::from("<date>,<pulse>,<systolic>,<diastolic>"),          // [0,4,2,3]
+            source: String::from("<date> <time>: <systolic>/<diastolic> <pulse>"),
+            target: String::from("<date>,<pulse>,<systolic>,<diastolic>"),
             ui_size: 1.2,
             ui_mode: InterfaceMode::Dark,
             path: String::new(),
-            data: Table::new(),
+            data: Table::new(5),
             parser: Parser::new()
         }
     }
@@ -78,7 +78,9 @@ impl Default for Reshaper
 impl Reshaper
 {
     fn new (context: &eframe::CreationContext<'_>) -> Self {
-        let object = if let Some(ps) = context.storage { eframe::get_value(ps, eframe::APP_KEY).unwrap_or_default() } else { Reshaper::default() };
+        let mut object = if let Some(ps) = context.storage { eframe::get_value(ps, eframe::APP_KEY).unwrap_or_default() } else { Reshaper::default() };
+        Result::unwrap(object.parser.set_source(&object.source));
+        Result::unwrap(object.parser.set_target(&object.target));
         Self::set_fonts(&context.egui_ctx);
         Self::set_style(&context.egui_ctx, object.ui_mode);
         context.egui_ctx.set_zoom_factor(object.ui_size);
@@ -163,9 +165,7 @@ impl Reshaper
         let builder = egui_extras::TableBuilder::new(ui)
             .sense(egui::Sense::click())
             .cell_layout(egui::Layout::left_to_right(egui::Align::TOP))
-            .column(egui_extras::Column::auto())
-            .column(egui_extras::Column::auto())
-            .column(egui_extras::Column::auto())
+            .columns(egui_extras::Column::auto(), 3) //TODO: replace with variable count of target template.
             .column(egui_extras::Column::remainder());
             if reset {
                 builder.reset();
@@ -200,34 +200,38 @@ impl Reshaper
                     let ir = row.index();
                     let ic = 0;
                     row.col(|ui| {
-                        if let Some(text) = self.data.get(ir, ic) {
+                        if let Some(text) = self.data.get(ir, 0) {
                             ui.label(text);
                         }
                     });
                     row.col(|ui| {
-                        ui.label("70");
+                        if let Some(text) = self.data.get(ir, 4) {
+                            ui.label(text);
+                        }
                     });
                     row.col(|ui| {
-                        ui.label("128");
+                        if let Some(text) = self.data.get(ir, 2) {
+                            ui.label(text);
+                        }
                     });
                     row.col(|ui| {
-                        ui.label("75");
+                        if let Some(text) = self.data.get(ir, 3) {
+                            ui.label(text);
+                        }
                     });
                 });
             });
 
     }
 
-    // let row: Vec<String> = line.split(',').map(|s| s.trim().to_string()).collect();
     fn load_file (&mut self, path: String) {
         self.path = path;
-        self.data = Table::new();
+        self.data = Table::new(self.data.width());
         if let Ok(file) = std::fs::File::open(&self.path) {
             let reader  = std::io::BufReader::new(file);
-            std::io::BufRead::lines(reader).for_each(|line| {
-                if let Ok(text) = line {
-                    // let mut r = Row::new(row);
-                    self.data.add(text).and_then(|r| r.add(0, 10)); //TODO: Replace parsing row using source template.
+            std::io::BufRead::lines(reader).for_each(|row| {
+                if let Ok(row) = row {
+                    self.data.add(row.as_str(), self.parser.split(row.as_str()));
                 }
             });
         }
@@ -251,15 +255,16 @@ impl App for Reshaper
         egui::TopBottomPanel::top("Templates").frame(self.get_frame()).resizable(false).show(context, |ui| {
             ui.with_layout(egui::Layout::top_down_justified(egui::Align::LEFT), |ui| {
                 ui.label(egui::RichText::new("SOURCE TEMPLATE").small().weak());
-                if ui.add(ErrorField::new(&mut self.source, source_is_valid)).lost_focus() {
+                if ui.add(ErrorField::new(&mut self.source, source_is_valid)).lost_focus() && self.parser.set_source(&self.source).is_err() {
+                    // object.parser.set_source(&object.source);
+                    // object.parser.set_target(&object.target);
+                    ui.label("Source template error");
                 };
                 ui.add_space(12.0);
                 ui.label(egui::RichText::new("TARGET TEMPLATE").small().weak());
-                if ui.add(ErrorField::new(&mut self.target, target_is_valid)).lost_focus() {
+                if ui.add(ErrorField::new(&mut self.target, target_is_valid)).lost_focus() && self.parser.set_target(&self.target).is_err() {
+                    ui.label("Target template error");
                 };
-                // if !self.path.is_empty() {
-                //     ui.label(self.path.clone());
-                // }
             });
         });
         egui::TopBottomPanel::bottom("Settings").frame(self.get_frame()).resizable(false).show(context, |ui| {
@@ -291,12 +296,12 @@ impl App for Reshaper
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Max), |ui| {
                     ui.style_mut().spacing.button_padding = egui::Vec2::new(8.0, 2.0);
                     if ui.button("\u{e171}  Clear data").clicked() {
-                        self.data = Table::new();
+                        self.data = Table::new(self.data.width());
                         self.path = String::new();
                     };
                     if ui.button("\u{eaf3}  Load test data").clicked() {
-                        self.parser.parse_source(&self.source);
-                        self.data.add(String::from("\"2024-10-25\" M: 131/79 63")).and_then(|s| s.add(1,11));
+                        // self.parser.set_source(&self.source);
+                        self.data.add("2024-10-25 M: 131/79 63", vec![(0, 10)]);
                     };
                 });
             });

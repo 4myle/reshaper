@@ -6,13 +6,13 @@ version = "1.0.0"
 edition = "2024"
 
 [dependencies]
-eframe = { version = "0.31.0", default-features = false, features = ["glow", "persistence"] }
+eframe = { version = "0.31.1", default-features = false, features = ["glow", "persistence"] }
 serde  = { version = "1.0.218" }
 regex  = "1.11.1"
-egui_extras = "0.31.0"
+egui_extras = "0.31.1"
 
 [build-dependencies]
-winresource = "0.1.19"
+winresource = "0.1.20"
 
 [profile.dev]
 debug = 2

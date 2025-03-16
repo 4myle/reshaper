@@ -4,20 +4,26 @@ use crate::models::row::Row;
 #[derive(Default)]
 pub struct Table
 {
+    width: usize,
     rows: Vec<Row>
 }
 
 impl Table 
 {
     
-    pub fn new () -> Self {
+    pub fn new (columns: usize) -> Self {
         Self { 
+            width: columns,
             rows: Vec::new()
         }
     }
 
-    pub fn add (&mut self, string: String) -> Option<&mut Row> {
-        self.rows.push(Row::new(string)); // Move occurs here.
+    pub fn add (&mut self, text: &str, slices: Vec<(usize,usize)>) -> Option<&mut Row> {
+        let mut row = Row::new(text, self.width);
+        for range in slices {
+            row.add(range.0, range.1);
+        }
+        self.rows.push(row);
         self.rows.last_mut()
     }
 
@@ -25,7 +31,11 @@ impl Table
         if row >= self.rows.len() {
             return None;
         }
-        Some(self.rows[row].get(column))
+        self.rows[row].get(column)
+    }
+
+    pub fn width (&self) -> usize {
+        self.width
     }
 
     pub fn is_empty (&self) -> bool {
