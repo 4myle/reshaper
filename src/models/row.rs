@@ -11,31 +11,35 @@ use std::rc::Rc;
 pub struct Row
 {
     text: String,
-    part: Vec<Rc<str>>
+    parts: Vec<Rc<str>>
 }
 
 impl Row
 {
     pub fn new (text: &str, width: usize) -> Self {
         Self { 
-            text: text.to_string(), 
-            part: Vec::with_capacity(width)
+            text:  text.to_string(), 
+            parts: Vec::with_capacity(width)
         }
     }
 
-    pub fn add (&mut self, start: usize, end: usize) -> Option<()> {
+    pub fn add (&mut self, start: usize, end: usize) -> Option<&mut Row> {
         if self.text.is_empty() || start > end || end > self.text.len() {
             return None;
         }
-        self.part.push(self.text[start..end].into());
-        Some(())
+        self.parts.push(self.text[start..end].into());
+        Some(self)
     }
 
-    pub fn get (&self, index: usize) -> Option<&str> {
-        if self.text.is_empty() || index > self.part.len() {
+    pub fn get (&self, column: usize) -> Option<&str> {
+        if self.text.is_empty() || column > self.parts.len() {
             return None;
         }
-        Some(&self.part[index])
+        Some(&self.parts[column])
+    }
+
+    pub fn get_parts (&self) -> &Vec<Rc<str>> {
+        &self.parts
     }
 
 }

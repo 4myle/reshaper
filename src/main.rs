@@ -1,19 +1,5 @@
 /*
-
-Simple template-based parsing and transforming of a text file.
-
-Input format description markup:
-    `<date> <time>: <systolic>/<diastolic> <pulse>`
-
-Possible extension to this could be:
-    `<date=iso8601date> <time=M|K>: <systolic=u8>/<diastolic=u8> <pulse=u8>`
-So that expression would be possible in the output.
-
-Output format example:
-    `<date>;<time>;<systolic>;<diastolic>;<pulse>`
-
-Blank means "one or more white space characters".
-
+Simple template-based parsing and transforming of a text file with values.
 */
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
@@ -31,6 +17,7 @@ use crate::widgets::switch::Switch;
 mod models;
 use crate::models::table::Table;
 use crate::models::parser::Parser;
+use crate::models::parser::Origin;
 
 
 const WINDOW_SIZE:  egui::Vec2 = egui::Vec2::new(640.0, 480.0);
@@ -52,8 +39,11 @@ struct Reshaper
     target: String,
     ui_size: f32,
     ui_mode: InterfaceMode,
-    path: String,
+    valid_source: bool,
+    valid_target: bool,
 
+    #[serde(skip)]
+    path: String,
     #[serde(skip)]
     data: Table,
     #[serde(skip)]
@@ -70,7 +60,9 @@ impl Default for Reshaper
             ui_mode: InterfaceMode::Dark,
             path: String::new(),
             data: Table::new(5),
-            parser: Parser::new()
+            parser: Parser::new(),
+            valid_source: false,
+            valid_target: false
         }
     }
 }
@@ -79,8 +71,8 @@ impl Reshaper
 {
     fn new (context: &eframe::CreationContext<'_>) -> Self {
         let mut object = if let Some(ps) = context.storage { eframe::get_value(ps, eframe::APP_KEY).unwrap_or_default() } else { Reshaper::default() };
-        Result::unwrap(object.parser.set_source(&object.source));
-        Result::unwrap(object.parser.set_target(&object.target));
+        object.valid_source = object.parser.set_source(&object.source).is_ok();
+        object.valid_target = object.parser.set_target(&object.target).is_ok();
         Self::set_fonts(&context.egui_ctx);
         Self::set_style(&context.egui_ctx, object.ui_mode);
         context.egui_ctx.set_zoom_factor(object.ui_size);
@@ -152,73 +144,34 @@ impl Reshaper
         }
     }
 
-    fn valid_source (&self) -> bool {
-        !self.source.is_empty()
-    }
-
-    fn valid_target (&self) -> bool {
-        !self.target.is_empty()
-    }
-
-    fn create_table (&self, ui: &mut egui::Ui, reset: bool) {
+    fn create_table (&self, ui: &mut egui::Ui) {
+        let origin = Origin::Target;
         ui.style_mut().spacing.item_spacing = egui::Vec2::new(16.0, 0.0);
         let builder = egui_extras::TableBuilder::new(ui)
             .sense(egui::Sense::click())
             .cell_layout(egui::Layout::left_to_right(egui::Align::TOP))
-            .columns(egui_extras::Column::auto(), 3) //TODO: replace with variable count of target template.
+            .columns(egui_extras::Column::auto(), self.parser.variables(origin).count()-1)
             .column(egui_extras::Column::remainder());
-            if reset {
-                builder.reset();
-            }
+            // if reset {
+            //     builder.reset();
+            // }
             builder.header(24.0, |mut header| {
-                // let cc = self.data[0].count();
-                header.col(|ui| {
-                    ui.horizontal(|ui| {
-                        ui.strong("date");
-                        ui.button("\u{e316}").clicked();
+                self.parser.variables(origin).for_each(|v| {
+                    header.col(|ui| {
+                        ui.strong(v);
                     });
-                });
-                header.col(|ui| {
-                    ui.strong("pulse");
-                });
-                header.col(|ui| {
-                    ui.strong("systolic");
-                });
-                header.col(|ui| {
-                    ui.strong("diastolic");
                 });
             })
             .body(|body| {
-                // number_of_variables
-                // number_of_observations
-                // number_of_rows
-                // number_of_headers
-                body.rows(20.0, self.data.rows_total(), |mut row| {
-                    // for header in self.data.header_count() {
-                    //     self.data.get(row.index(), heading);
-                    // }
-                    let ir = row.index();
-                    let ic = 0;
-                    row.col(|ui| {
-                        if let Some(text) = self.data.get(ir, 0) {
-                            ui.label(text);
-                        }
-                    });
-                    row.col(|ui| {
-                        if let Some(text) = self.data.get(ir, 4) {
-                            ui.label(text);
-                        }
-                    });
-                    row.col(|ui| {
-                        if let Some(text) = self.data.get(ir, 2) {
-                            ui.label(text);
-                        }
-                    });
-                    row.col(|ui| {
-                        if let Some(text) = self.data.get(ir, 3) {
-                            ui.label(text);
-                        }
-                    });
+                body.rows(20.0, self.data.row_count(), |mut row| {
+                    let observation = row.index();
+                    for variable in self.parser.positions(origin) {
+                        row.col(|ui| {
+                            if let Some(text) = self.data.get(observation, *variable) {
+                                ui.label(text);
+                            }
+                        });
+                    };
                 });
             });
 
@@ -226,12 +179,12 @@ impl Reshaper
 
     fn load_file (&mut self, path: String) {
         self.path = path;
-        self.data = Table::new(self.data.width());
+        self.data = Table::new(self.parser.variables(Origin::Source).len());
         if let Ok(file) = std::fs::File::open(&self.path) {
             let reader  = std::io::BufReader::new(file);
             std::io::BufRead::lines(reader).for_each(|row| {
                 if let Ok(row) = row {
-                    self.data.add(row.as_str(), self.parser.split(row.as_str()));
+                    self.data.add(row.as_str(), self.parser.split(row.as_str()).unwrap_or_default());
                 }
             });
         }
@@ -246,8 +199,8 @@ impl App for Reshaper
     }
 
     fn update (&mut self, context: &egui::Context, _frame: &mut Frame) {
-        let source_is_valid = self.valid_source();
-        let target_is_valid = self.valid_target();
+        // let source_is_valid = self.valid_source();
+        // let target_is_valid = self.valid_target();
         context.style_mut(|writer| {
             writer.spacing.item_spacing = egui::Vec2::new(12.0, 8.0);
             writer.spacing.button_padding = egui::Vec2::new(2.0, 0.0);
@@ -255,15 +208,27 @@ impl App for Reshaper
         egui::TopBottomPanel::top("Templates").frame(self.get_frame()).resizable(false).show(context, |ui| {
             ui.with_layout(egui::Layout::top_down_justified(egui::Align::LEFT), |ui| {
                 ui.label(egui::RichText::new("SOURCE TEMPLATE").small().weak());
-                if ui.add(ErrorField::new(&mut self.source, source_is_valid)).lost_focus() && self.parser.set_source(&self.source).is_err() {
-                    // object.parser.set_source(&object.source);
-                    // object.parser.set_target(&object.target);
-                    ui.label("Source template error");
+                if ui.add(ErrorField::new(&mut self.source, self.valid_source)).changed() {
+                    match self.parser.set_source(&self.source) {
+                        Ok(_)  => self.valid_source = true,
+                        Err(m) => {
+                            self.valid_source = false;
+                            ui.label(m);
+                        }
+                        
+                    }
                 };
                 ui.add_space(12.0);
                 ui.label(egui::RichText::new("TARGET TEMPLATE").small().weak());
-                if ui.add(ErrorField::new(&mut self.target, target_is_valid)).lost_focus() && self.parser.set_target(&self.target).is_err() {
-                    ui.label("Target template error");
+                if ui.add(ErrorField::new(&mut self.target, self.valid_target)).changed() {
+                    match self.parser.set_target(&self.target) {
+                        Ok(_)  => self.valid_target = true,
+                        Err(m) => {
+                            self.valid_target = false;
+                            ui.label(m);
+                        }
+                        
+                    }
                 };
             });
         });
@@ -291,17 +256,20 @@ impl App for Reshaper
                         }
                     };
                 });
-                //TODO only for testing(?).
+                //TODO only for testing.
                 ui.add_space(48.0);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Max), |ui| {
                     ui.style_mut().spacing.button_padding = egui::Vec2::new(8.0, 2.0);
                     if ui.button("\u{e171}  Clear data").clicked() {
-                        self.data = Table::new(self.data.width());
+                        self.data = Table::new(self.parser.variables(Origin::Source).len());
                         self.path = String::new();
                     };
                     if ui.button("\u{eaf3}  Load test data").clicked() {
-                        // self.parser.set_source(&self.source);
-                        self.data.add("2024-10-25 M: 131/79 63", vec![(0, 10)]);
+                        // self.data.add("2024-10-25 M: 131/79 63", vec![(0, 10), (11,12),(14,17),(18,20),(21,23)]);
+                        if let Some(parts) = self.data.get_parts(0) {
+                            let target = self.parser.transform(parts);
+                            println!("{target:#?}");
+                        }
                     };
                 });
             });
@@ -321,7 +289,7 @@ impl App for Reshaper
             if self.data.is_empty() {
                 ui.add_sized(ui.available_size(), egui::Label::new(egui::RichText::new("(drop file here)").heading().italics().weak()));
             } else {
-                self.create_table(ui, false);
+                self.create_table(ui);
             }
         });
     }

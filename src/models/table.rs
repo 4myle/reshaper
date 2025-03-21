@@ -1,4 +1,5 @@
 
+use std::rc::Rc;
 use crate::models::row::Row;
 
 #[derive(Default)]
@@ -27,24 +28,27 @@ impl Table
         self.rows.last_mut()
     }
 
-    pub fn get (&self, row: usize, column: usize) -> Option<&str> {
-        if row >= self.rows.len() {
+    pub fn get (&self, index: usize, column: usize) -> Option<&str> {
+        if index >= self.rows.len() || column >= self.width {
             return None;
         }
-        self.rows[row].get(column)
+        self.rows[index].get(column)
     }
 
-    pub fn width (&self) -> usize {
-        self.width
+    pub fn get_parts (&self, index: usize) -> Option<&Vec<Rc<str>>> {
+        if index >= self.rows.len() {
+            return None;
+        }
+        Some(self.rows[index].get_parts())
     }
 
     pub fn is_empty (&self) -> bool {
         self.rows.is_empty()
     }
 
-    pub fn rows_total (&self) -> usize {
+    pub fn row_count (&self) -> usize {
         self.rows.len()
 
     }
-
+    
 }
