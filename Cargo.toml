@@ -7,7 +7,7 @@ edition = "2024"
 
 [dependencies]
 eframe = { version = "0.31.1", default-features = false, features = ["glow", "persistence"] }
-serde  = { version = "1.0.218" }
+serde  = { version = "1.0.219" }
 regex  = "1.11.1"
 egui_extras = "0.31.1"
 

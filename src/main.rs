@@ -30,7 +30,19 @@ enum InterfaceMode
     Light
 }
 
-// Implement data as Vec<Row>, where Row is struct with data: String and part: Vec<&str> (or [&str]?).
+// Extract only message from an Result error by adding a new trait to Result (go Rust!).
+trait MessageOnly {
+    fn as_message (&self) -> String;
+}
+
+impl <T,E> MessageOnly for Result<T,E> where E: ToString {
+    fn as_message (&self) -> String {
+        match self {
+            Ok  (_) => String::new(),
+            Err (m) => m.to_string()
+        }
+    }
+}
 
 #[derive(serde::Deserialize, serde::Serialize)]
 struct Reshaper
@@ -39,15 +51,13 @@ struct Reshaper
     target: String,
     ui_size: f32,
     ui_mode: InterfaceMode,
-    valid_source: bool,
-    valid_target: bool,
+    target_view: bool,
 
-    #[serde(skip)]
-    path: String,
-    #[serde(skip)]
-    data: Table,
-    #[serde(skip)]
-    parser: Parser,
+    #[serde(skip)] source_error: String,
+    #[serde(skip)] target_error: String,
+    #[serde(skip)] path: String,
+    #[serde(skip)] data: Table,
+    #[serde(skip)] parser: Parser
 }
 
 impl Default for Reshaper
@@ -61,8 +71,9 @@ impl Default for Reshaper
             path: String::new(),
             data: Table::new(5),
             parser: Parser::new(),
-            valid_source: false,
-            valid_target: false
+            source_error: String::new(),
+            target_error: String::new(),
+            target_view: true
         }
     }
 }
@@ -71,8 +82,9 @@ impl Reshaper
 {
     fn new (context: &eframe::CreationContext<'_>) -> Self {
         let mut object = if let Some(ps) = context.storage { eframe::get_value(ps, eframe::APP_KEY).unwrap_or_default() } else { Reshaper::default() };
-        object.valid_source = object.parser.set_source(&object.source).is_ok();
-        object.valid_target = object.parser.set_target(&object.target).is_ok();
+        // object.source_error = match object.parser.set_source(&object.source) { Ok(_) => String::new(), Err(m) => m.to_string() };
+        object.source_error = object.parser.set_source(&object.source).as_message();
+        object.target_error = object.parser.set_target(&object.target).as_message();
         Self::set_fonts(&context.egui_ctx);
         Self::set_style(&context.egui_ctx, object.ui_mode);
         context.egui_ctx.set_zoom_factor(object.ui_size);
@@ -129,6 +141,10 @@ impl Reshaper
         visuals.selection.stroke.color  = ACCENT_COLOR; 
         visuals.selection.bg_fill = ACCENT_COLOR.gamma_multiply(0.35);
         visuals.slider_trailing_fill = true;
+        context.style_mut(|style| {
+            style.spacing.item_spacing = egui::Vec2::new(12.0, 8.0);
+            style.spacing.button_padding = egui::Vec2::new(6.0, 2.0);
+        });
         context.set_visuals(visuals);
     }
     
@@ -199,37 +215,31 @@ impl App for Reshaper
     }
 
     fn update (&mut self, context: &egui::Context, _frame: &mut Frame) {
-        // let source_is_valid = self.valid_source();
-        // let target_is_valid = self.valid_target();
-        context.style_mut(|writer| {
-            writer.spacing.item_spacing = egui::Vec2::new(12.0, 8.0);
-            writer.spacing.button_padding = egui::Vec2::new(2.0, 0.0);
-        });
         egui::TopBottomPanel::top("Templates").frame(self.get_frame()).resizable(false).show(context, |ui| {
             ui.with_layout(egui::Layout::top_down_justified(egui::Align::LEFT), |ui| {
                 ui.label(egui::RichText::new("SOURCE TEMPLATE").small().weak());
-                if ui.add(ErrorField::new(&mut self.source, self.valid_source)).changed() {
-                    match self.parser.set_source(&self.source) {
-                        Ok(_)  => self.valid_source = true,
-                        Err(m) => {
-                            self.valid_source = false;
-                            ui.label(m);
-                        }
-                        
-                    }
+                if ui.add(ErrorField::new(&mut self.source, self.source_error.is_empty())).changed() {
+                    self.source_error = self.parser.set_source(&self.source).as_message();
+                    self.target_error = self.parser.set_target(&self.target).as_message(); // Because source errors can cause target errors.
                 };
+                if !self.source_error.is_empty() {
+                    ui.label(egui::RichText::new(&self.source_error).color(egui::Color32::RED));
+                }
                 ui.add_space(12.0);
                 ui.label(egui::RichText::new("TARGET TEMPLATE").small().weak());
-                if ui.add(ErrorField::new(&mut self.target, self.valid_target)).changed() {
-                    match self.parser.set_target(&self.target) {
-                        Ok(_)  => self.valid_target = true,
-                        Err(m) => {
-                            self.valid_target = false;
-                            ui.label(m);
-                        }
-                        
-                    }
+                if ui.add(ErrorField::new(&mut self.target, self.target_error.is_empty())).changed() {
+                    self.target_error = self.parser.set_target(&self.target).as_message();
                 };
+                if !self.target_error.is_empty() {
+                    ui.label(egui::RichText::new(&self.target_error).color(egui::Color32::RED));
+                }
+            });
+            ui.add_space(12.0);
+            ui.horizontal(|ui| {
+                if ui.add(Switch::new(self.target_view)).clicked() {
+                    self.target_view = !self.target_view;
+                };
+                ui.label(format!("{} data shown in table.", if self.target_view {"Transformed"} else {"Original"}));
             });
         });
         egui::TopBottomPanel::bottom("Settings").frame(self.get_frame()).resizable(false).show(context, |ui| {
@@ -256,16 +266,12 @@ impl App for Reshaper
                         }
                     };
                 });
-                //TODO only for testing.
-                ui.add_space(48.0);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Max), |ui| {
-                    ui.style_mut().spacing.button_padding = egui::Vec2::new(8.0, 2.0);
                     if ui.button("\u{e171}  Clear data").clicked() {
                         self.data = Table::new(self.parser.variables(Origin::Source).len());
                         self.path = String::new();
                     };
                     if ui.button("\u{eaf3}  Load test data").clicked() {
-                        // self.data.add("2024-10-25 M: 131/79 63", vec![(0, 10), (11,12),(14,17),(18,20),(21,23)]);
                         if let Some(parts) = self.data.get_parts(0) {
                             let target = self.parser.transform(parts);
                             println!("{target:#?}");
@@ -274,7 +280,7 @@ impl App for Reshaper
                 });
             });
         });
-        // Must be last for remaining size to be calculated correctly.
+        // Must be last for remaining size in the middle to be calculated correctly.
         egui::CentralPanel::default().frame(self.get_frame()).show(context, |ui| {
             if context.input(|input| !input.raw.hovered_files.is_empty()) {
                 ui.painter().rect(ui.min_rect(), 0.0, ui.style().visuals.selection.bg_fill, egui::Stroke::NONE, egui::StrokeKind::Inside);
