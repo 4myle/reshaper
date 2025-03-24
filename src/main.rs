@@ -51,10 +51,11 @@ struct Reshaper
     target: String,
     ui_size: f32,
     ui_mode: InterfaceMode,
-    target_view: bool,
 
     #[serde(skip)] source_error: String,
     #[serde(skip)] target_error: String,
+    #[serde(skip)] target_view: bool,
+    #[serde(skip)] is_dragging: bool,
     #[serde(skip)] path: String,
     #[serde(skip)] data: Table,
     #[serde(skip)] parser: Parser
@@ -68,12 +69,13 @@ impl Default for Reshaper
             target: String::from("<date>,<pulse>,<systolic>,<diastolic>"),
             ui_size: 1.2,
             ui_mode: InterfaceMode::Dark,
+            target_view: true,
+            is_dragging: false,
             path: String::new(),
             data: Table::new(5),
             parser: Parser::new(),
             source_error: String::new(),
             target_error: String::new(),
-            target_view: true
         }
     }
 }
@@ -143,7 +145,7 @@ impl Reshaper
         visuals.slider_trailing_fill = true;
         context.style_mut(|style| {
             style.spacing.item_spacing = egui::Vec2::new(12.0, 8.0);
-            style.spacing.button_padding = egui::Vec2::new(6.0, 2.0);
+            style.spacing.button_padding = egui::Vec2::new(8.0, 2.0);
         });
         context.set_visuals(visuals);
     }
@@ -160,8 +162,81 @@ impl Reshaper
         }
     }
 
+    fn create_upper (&mut self, ui: &mut egui::Ui, context: &egui::Context) {
+        ui.with_layout(egui::Layout::top_down_justified(egui::Align::LEFT), |ui| {
+            ui.label(egui::RichText::new("SOURCE TEMPLATE").small().weak());
+            if ui.add(ErrorField::new(&mut self.source, self.source_error.is_empty())).changed() {
+                self.source_error = self.parser.set_source(&self.source).as_message();
+                self.target_error = self.parser.set_target(&self.target).as_message(); // Source errors can cause target errors.
+            };
+            if !self.source_error.is_empty() {
+                ui.label(egui::RichText::new(&self.source_error).color(egui::Color32::RED));
+            }
+            ui.add_space(12.0);
+            ui.label(egui::RichText::new("TARGET TEMPLATE").small().weak());
+            if ui.add(ErrorField::new(&mut self.target, self.target_error.is_empty())).changed() {
+                self.target_error = self.parser.set_target(&self.target).as_message();
+            };
+            if !self.target_error.is_empty() {
+                ui.label(egui::RichText::new(&self.target_error).color(egui::Color32::RED));
+            }
+        });
+        if !self.data.is_empty() {
+            ui.add_space(12.0);
+            ui.horizontal(|ui| {
+                if ui.add(Switch::new(self.target_view)).clicked() {
+                    self.target_view = !self.target_view;
+                };
+                ui.label(format!("{} data shown in table.", if self.target_view {"Transformed"} else {"Original"}));
+                ui.add_space(12.0);
+                let dragger = ui.small_button("\u{e945} Drag to export").interact(egui::Sense::click_and_drag()).highlight();
+                if dragger.drag_started() {
+                    self.is_dragging = true;
+                }
+                let inside = context.screen_rect().contains(ui.input(|i| i.pointer.interact_pos()).unwrap_or_default());
+                if dragger.drag_stopped() {
+                    context.set_cursor_icon(egui::CursorIcon::Default);
+                    self.is_dragging = false;
+                    if !inside {
+                        self.save_file();
+                    }
+                }
+                if self.is_dragging {
+                    context.set_cursor_icon(if inside { egui::CursorIcon::NoDrop } else { egui::CursorIcon::Grabbing });
+                }
+            });
+        }
+    }
+
+    fn create_lower (&mut self, ui: &mut egui::Ui, context: &egui::Context) {
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                ui.label(egui::RichText::new("TEXT SIZE").small().weak());
+                if ui.add(egui::Slider::new(&mut self.ui_size, 1.0..=1.7)).changed() {
+                    context.set_zoom_factor(self.ui_size);
+                };
+            });
+            ui.add_space(24.0);
+            ui.vertical(|ui| {
+                ui.label(egui::RichText::new("DARK MODE").small().weak());
+                if ui.add(Switch::new(InterfaceMode::Dark == self.ui_mode)).clicked() {
+                    match self.ui_mode {
+                        InterfaceMode::Dark  => { 
+                            self.ui_mode = InterfaceMode::Light;
+                            Self::set_style(ui.ctx(), InterfaceMode::Light);
+                        },
+                        InterfaceMode::Light => { 
+                            self.ui_mode = InterfaceMode::Dark;
+                            Self::set_style(ui.ctx(), InterfaceMode::Dark);
+                        }
+                    }
+                };
+            });
+        });
+    }
+
     fn create_table (&self, ui: &mut egui::Ui) {
-        let origin = Origin::Target;
+        let origin = if self.target_view { Origin::Target } else { Origin::Source };
         ui.style_mut().spacing.item_spacing = egui::Vec2::new(16.0, 0.0);
         let builder = egui_extras::TableBuilder::new(ui)
             .sense(egui::Sense::click())
@@ -206,6 +281,13 @@ impl Reshaper
         }
     }
 
+    fn save_file(&mut self) {
+        if let Some(parts) = self.data.get_parts(0) {
+            let target = self.parser.transform(parts);
+            println!("{target:#?}");
+        }
+    }
+
 }
 
 impl App for Reshaper
@@ -216,82 +298,33 @@ impl App for Reshaper
 
     fn update (&mut self, context: &egui::Context, _frame: &mut Frame) {
         egui::TopBottomPanel::top("Templates").frame(self.get_frame()).resizable(false).show(context, |ui| {
-            ui.with_layout(egui::Layout::top_down_justified(egui::Align::LEFT), |ui| {
-                ui.label(egui::RichText::new("SOURCE TEMPLATE").small().weak());
-                if ui.add(ErrorField::new(&mut self.source, self.source_error.is_empty())).changed() {
-                    self.source_error = self.parser.set_source(&self.source).as_message();
-                    self.target_error = self.parser.set_target(&self.target).as_message(); // Because source errors can cause target errors.
-                };
-                if !self.source_error.is_empty() {
-                    ui.label(egui::RichText::new(&self.source_error).color(egui::Color32::RED));
-                }
-                ui.add_space(12.0);
-                ui.label(egui::RichText::new("TARGET TEMPLATE").small().weak());
-                if ui.add(ErrorField::new(&mut self.target, self.target_error.is_empty())).changed() {
-                    self.target_error = self.parser.set_target(&self.target).as_message();
-                };
-                if !self.target_error.is_empty() {
-                    ui.label(egui::RichText::new(&self.target_error).color(egui::Color32::RED));
-                }
-            });
-            ui.add_space(12.0);
-            ui.horizontal(|ui| {
-                if ui.add(Switch::new(self.target_view)).clicked() {
-                    self.target_view = !self.target_view;
-                };
-                ui.label(format!("{} data shown in table.", if self.target_view {"Transformed"} else {"Original"}));
-            });
+            self.create_upper(ui, context);
         });
         egui::TopBottomPanel::bottom("Settings").frame(self.get_frame()).resizable(false).show(context, |ui| {
-            ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    ui.label(egui::RichText::new("TEXT SIZE").small().weak());
-                    if ui.add(egui::Slider::new(&mut self.ui_size, 1.0..=1.7)).changed() {
-                        context.set_zoom_factor(self.ui_size);
-                    };
-                });
-                ui.add_space(24.0);
-                ui.vertical(|ui| {
-                    ui.label(egui::RichText::new("DARK MODE").small().weak());
-                    if ui.add(Switch::new(InterfaceMode::Dark == self.ui_mode)).clicked() {
-                        match self.ui_mode {
-                            InterfaceMode::Dark  => { 
-                                self.ui_mode = InterfaceMode::Light;
-                                Self::set_style(ui.ctx(), InterfaceMode::Light);
-                            },
-                            InterfaceMode::Light => { 
-                                self.ui_mode = InterfaceMode::Dark;
-                                Self::set_style(ui.ctx(), InterfaceMode::Dark);
-                            }
-                        }
-                    };
-                });
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Max), |ui| {
-                    if ui.button("\u{e171}  Clear data").clicked() {
-                        self.data = Table::new(self.parser.variables(Origin::Source).len());
-                        self.path = String::new();
-                    };
-                    if ui.button("\u{eaf3}  Load test data").clicked() {
-                        if let Some(parts) = self.data.get_parts(0) {
-                            let target = self.parser.transform(parts);
-                            println!("{target:#?}");
-                        }
-                    };
-                });
-            });
+            self.create_lower(ui, context);
         });
         // Must be last for remaining size in the middle to be calculated correctly.
         egui::CentralPanel::default().frame(self.get_frame()).show(context, |ui| {
-            if context.input(|input| !input.raw.hovered_files.is_empty()) {
-                ui.painter().rect(ui.min_rect(), 0.0, ui.style().visuals.selection.bg_fill, egui::Stroke::NONE, egui::StrokeKind::Inside);
-            } 
+            let mut hovered = egui::HoveredFile::default();
+            let mut dropped = egui::DroppedFile::default();
             context.input(|input| {
-                if !input.raw.dropped_files.is_empty() {
-                    if let Some(path) = &input.raw.dropped_files[0].path {
-                        self.load_file(path.display().to_string());
-                    };
-                }
+                if !input.raw.hovered_files.is_empty() { hovered = input.raw.hovered_files[0].clone() };
+                if !input.raw.dropped_files.is_empty() { dropped = input.raw.dropped_files[0].clone() };
             });
+            if hovered.path.is_some() {                
+                ui.painter().rect(
+                    ui.min_rect(), 
+                    0.0, 
+                    ui.style().visuals.selection.bg_fill, 
+                    egui::Stroke::new(2.0, ACCENT_COLOR), 
+                    egui::StrokeKind::Middle
+                );
+            }
+            if dropped.path.is_some() {
+                if let Some(path) = &dropped.path {
+                    self.load_file(path.display().to_string());
+                };
+            }
             if self.data.is_empty() {
                 ui.add_sized(ui.available_size(), egui::Label::new(egui::RichText::new("(drop file here)").heading().italics().weak()));
             } else {
