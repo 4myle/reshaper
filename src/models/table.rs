@@ -11,15 +11,17 @@ pub struct Table
 
 impl Table 
 {
-    
-    pub fn new (columns: usize) -> Self {
+    pub fn new () -> Self {
         Self { 
-            width: columns,
+            width: 0,
             rows: Vec::new()
         }
     }
 
     pub fn add (&mut self, text: &str, slices: Vec<(usize,usize)>) -> Option<&mut Row> {
+        if self.width == 0 {
+            self.width = slices.len();
+        }
         let mut row = Row::new(text, self.width);
         for range in slices {
             row.add(range.0, range.1);

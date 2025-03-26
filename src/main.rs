@@ -4,6 +4,8 @@ Simple template-based parsing and transforming of a text file with values.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
+use std::io::Write;
+
 use eframe::egui;
 use eframe:: { 
     App, 
@@ -52,13 +54,13 @@ struct Reshaper
     ui_size: f32,
     ui_mode: InterfaceMode,
 
+    #[serde(skip)] parser: Parser,
+    #[serde(skip)] data: Table,
+    #[serde(skip)] path: String,
     #[serde(skip)] source_error: String,
     #[serde(skip)] target_error: String,
     #[serde(skip)] target_view: bool,
-    #[serde(skip)] is_dragging: bool,
-    #[serde(skip)] path: String,
-    #[serde(skip)] data: Table,
-    #[serde(skip)] parser: Parser
+    #[serde(skip)] is_dragging: bool
 }
 
 impl Default for Reshaper
@@ -69,13 +71,13 @@ impl Default for Reshaper
             target: String::from("<date>,<pulse>,<systolic>,<diastolic>"),
             ui_size: 1.2,
             ui_mode: InterfaceMode::Dark,
-            target_view: true,
-            is_dragging: false,
-            path: String::new(),
-            data: Table::new(5),
             parser: Parser::new(),
+            data: Table::new(),
+            path: String::new(),
             source_error: String::new(),
             target_error: String::new(),
+            target_view: true,
+            is_dragging: false
         }
     }
 }
@@ -84,9 +86,9 @@ impl Reshaper
 {
     fn new (context: &eframe::CreationContext<'_>) -> Self {
         let mut object = if let Some(ps) = context.storage { eframe::get_value(ps, eframe::APP_KEY).unwrap_or_default() } else { Reshaper::default() };
-        // object.source_error = match object.parser.set_source(&object.source) { Ok(_) => String::new(), Err(m) => m.to_string() };
         object.source_error = object.parser.set_source(&object.source).as_message();
         object.target_error = object.parser.set_target(&object.target).as_message();
+        object.target_view = true; // Why is this set to false during deserialization?
         Self::set_fonts(&context.egui_ctx);
         Self::set_style(&context.egui_ctx, object.ui_mode);
         context.egui_ctx.set_zoom_factor(object.ui_size);
@@ -189,20 +191,20 @@ impl Reshaper
                 };
                 ui.label(format!("{} data shown in table.", if self.target_view {"Transformed"} else {"Original"}));
                 ui.add_space(12.0);
-                let dragger = ui.small_button("\u{e945} Drag to export").interact(egui::Sense::click_and_drag()).highlight();
-                if dragger.drag_started() {
+                let dragger = ui.small_button("\u{e074} Drag to export").interact(egui::Sense::click_and_drag()).highlight();
+                if  dragger.drag_started() {
                     self.is_dragging = true;
                 }
-                let inside = context.screen_rect().contains(ui.input(|i| i.pointer.interact_pos()).unwrap_or_default());
-                if dragger.drag_stopped() {
+                let outside = !context.screen_rect().contains(ui.input(|i| i.pointer.interact_pos()).unwrap_or_default());
+                if  dragger.drag_stopped() {
                     context.set_cursor_icon(egui::CursorIcon::Default);
                     self.is_dragging = false;
-                    if !inside {
+                    if outside {
                         self.save_file();
                     }
                 }
                 if self.is_dragging {
-                    context.set_cursor_icon(if inside { egui::CursorIcon::NoDrop } else { egui::CursorIcon::Grabbing });
+                    context.set_cursor_icon(if outside { egui::CursorIcon::Grabbing } else { egui::CursorIcon::NoDrop });
                 }
             });
         }
@@ -270,7 +272,7 @@ impl Reshaper
 
     fn load_file (&mut self, path: String) {
         self.path = path;
-        self.data = Table::new(self.parser.variables(Origin::Source).len());
+        self.data = Table::new();
         if let Ok(file) = std::fs::File::open(&self.path) {
             let reader  = std::io::BufReader::new(file);
             std::io::BufRead::lines(reader).for_each(|row| {
@@ -281,11 +283,24 @@ impl Reshaper
         }
     }
 
-    fn save_file(&mut self) {
-        if let Some(parts) = self.data.get_parts(0) {
-            let target = self.parser.transform(parts);
-            println!("{target:#?}");
-        }
+    fn save_file (&mut self) {
+        if let Some(desktop) = dirs::desktop_dir() {
+            let original = std::path::PathBuf::from(&self.path);
+            let mut path = desktop.join(original.file_name().unwrap_or_default());
+            path.set_extension("out.csv");
+            if let Ok(mut file) = std::fs::File::create(path) {
+                for row in 0..self.data.row_count() {
+                    if let Some(parts) = self.data.get_parts(row) {
+                        if let Ok(mut target) = self.parser.transform(parts) {
+                            target.push('\n');
+                            if file.write_all(target.as_bytes()).is_err() {
+                                return; // Result should be returned to inform user.
+                            }
+                        }
+                    }
+                }
+            };
+        };
     }
 
 }

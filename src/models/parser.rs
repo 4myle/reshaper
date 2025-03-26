@@ -45,7 +45,6 @@ impl Default for Parser {
 
 impl Parser
 {
-    
     pub fn new () -> Self {
         Self::default()
     }

@@ -17,4 +17,4 @@
 # Snitt kväll  = 135/79 81
 # Snitt totalt = 128/78 76
 
-<date=iso8601date> <time="M"|"K">: <systolic=u8>/<diastolic=u8> <pulse=u8>
+# <date=iso8601date> <time="M"|"K">: <systolic=u8>/<diastolic=u8> <pulse=u8>
