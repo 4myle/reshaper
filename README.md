@@ -3,7 +3,7 @@
 Simple template-based parsing and transforming of value-based text files. 
 User interface made with [egui](https://github.com/emilk/egui).
 
-> **DISCLAIMER**: this is a hobby project and as such should not be used in production, neither will it be maintained regurlarly.
+> **DISCLAIMER**: this application is a hobby project and should not be used for production use cases. It is provided as-is and is not likely to be maintained regurlarly.
 
 Example of input markup:
 ```
