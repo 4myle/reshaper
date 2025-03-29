@@ -5,6 +5,8 @@ User interface made with [egui](https://github.com/emilk/egui).
 
 > **DISCLAIMER**: this application is a hobby project and should not be used for production use cases. It is provided as-is and is not likely to be maintained regurlarly.
 
+![Screenshot of Reshaper](assets/Reshaper-screenshot.png)
+
 ## Use cases
 
 The application can be used to reshape text files, like CSV-files or files delimited in other ways, to other formats. 
