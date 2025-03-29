@@ -5,13 +5,13 @@
 // #![deny(clippy::panic)]
 // #![deny(unused_must_use)]
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(Default)]
 pub struct Row
 {
     text: String,
-    parts: Vec<Rc<str>>
+    parts: Vec<Arc<str>>
 }
 
 impl Row
@@ -32,13 +32,13 @@ impl Row
     }
 
     pub fn get (&self, column: usize) -> Option<&str> {
-        if self.text.is_empty() || column > self.parts.len() {
+        if self.text.is_empty() || column >= self.parts.len() {
             return None;
         }
         Some(&self.parts[column])
     }
 
-    pub fn get_parts (&self) -> &Vec<Rc<str>> {
+    pub fn get_parts (&self) -> &Vec<Arc<str>> {
         &self.parts
     }
 

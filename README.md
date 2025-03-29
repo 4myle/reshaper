@@ -1,6 +1,6 @@
 # Reshaper
 
-Simple template-based parsing and transforming of a text file. 
+Simple template-based parsing and transforming of value-based text files. 
 User interface made with [egui](https://github.com/emilk/egui).
 
 Example of input markup:
@@ -26,6 +26,6 @@ If so, expression could be supported in the output format, like.
 ```
  <date as "%m/%d/%Y">,<time as 1|2>,<systolic*100 + distolic>,<pulse/60>
 ```
-Date parsing strings here are the ones support by [chrono](https://docs.rs/chrono/latest/chrono/). 
+Date parsing strings here could be the ones supported by [chrono](https://docs.rs/chrono/latest/chrono/). 
 
-Support for multi-line input by aggregating on a choosen variable would also be useful.
+> **DISCLAIMER**: this is a hobby project and as such should not be used in production, neither will it be maintained regurlarly.

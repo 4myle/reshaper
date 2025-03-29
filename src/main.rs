@@ -5,6 +5,7 @@ Simple template-based parsing and transforming of a text file with values.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
 use std::io::Write;
+// use std::thread;
 
 use eframe::egui;
 use eframe:: { 
@@ -30,6 +31,15 @@ enum InterfaceMode
 {
     Dark,
     Light
+}
+
+#[derive(Default, PartialEq)]
+enum StateTracker 
+{
+    Changed,  // When table structure has changed and reset is needed.
+    Saving,   // When saving is in progress.
+    Dragging, // When export button is being dragged
+    #[default] Idle
 }
 
 // Extract only message from an Result error by adding a new trait to Result (go Rust!).
@@ -59,8 +69,9 @@ struct Reshaper
     #[serde(skip)] path: String,
     #[serde(skip)] source_error: String,
     #[serde(skip)] target_error: String,
+    #[serde(skip)] state: StateTracker,
     #[serde(skip)] target_view: bool,
-    #[serde(skip)] is_dragging: bool
+    #[serde(skip)] do_quotes: bool
 }
 
 impl Default for Reshaper
@@ -76,8 +87,9 @@ impl Default for Reshaper
             path: String::new(),
             source_error: String::new(),
             target_error: String::new(),
+            state: StateTracker::Idle,
             target_view: true,
-            is_dragging: false
+            do_quotes: false
         }
     }
 }
@@ -125,7 +137,6 @@ impl Reshaper
 
     // Static method, used in new.
     fn set_style (context: &egui::Context, mode: InterfaceMode) {
-        // Should be possile to use context.style().visuals.dark_mode instead of own tracking through InterfaceMode?
         let mut visuals: egui::Visuals;
         match mode {
             InterfaceMode::Dark  => {
@@ -170,6 +181,10 @@ impl Reshaper
             if ui.add(ErrorField::new(&mut self.source, self.source_error.is_empty())).changed() {
                 self.source_error = self.parser.set_source(&self.source).as_message();
                 self.target_error = self.parser.set_target(&self.target).as_message(); // Source errors can cause target errors.
+                if  self.source_error.is_empty() && self.target_error.is_empty(){
+                    self.state = StateTracker::Changed;
+                    self.load_file();
+                }
             };
             if !self.source_error.is_empty() {
                 ui.label(egui::RichText::new(&self.source_error).color(egui::Color32::RED));
@@ -178,6 +193,9 @@ impl Reshaper
             ui.label(egui::RichText::new("TARGET TEMPLATE").small().weak());
             if ui.add(ErrorField::new(&mut self.target, self.target_error.is_empty())).changed() {
                 self.target_error = self.parser.set_target(&self.target).as_message();
+                if  self.target_error.is_empty() {
+                    self.state = StateTracker::Changed;
+                }
             };
             if !self.target_error.is_empty() {
                 ui.label(egui::RichText::new(&self.target_error).color(egui::Color32::RED));
@@ -193,19 +211,22 @@ impl Reshaper
                 ui.add_space(12.0);
                 let dragger = ui.small_button("\u{e074} Drag to export").interact(egui::Sense::click_and_drag()).highlight();
                 if  dragger.drag_started() {
-                    self.is_dragging = true;
+                    self.state = StateTracker::Dragging;
                 }
                 let outside = !context.screen_rect().contains(ui.input(|i| i.pointer.interact_pos()).unwrap_or_default());
                 if  dragger.drag_stopped() {
                     context.set_cursor_icon(egui::CursorIcon::Default);
-                    self.is_dragging = false;
+                    self.state = StateTracker::Idle;
                     if outside {
-                        self.save_file();
+                        // thread::spawn(|| { // Should be this easy (nogo Rust).
+                            self.save_file();
+                        // });
                     }
                 }
-                if self.is_dragging {
+                if self.state == StateTracker::Dragging {
                     context.set_cursor_icon(if outside { egui::CursorIcon::Grabbing } else { egui::CursorIcon::NoDrop });
                 }
+                ui.checkbox(&mut self.do_quotes, "Write quotation marks");
             });
         }
     }
@@ -237,17 +258,19 @@ impl Reshaper
         });
     }
 
-    fn create_table (&self, ui: &mut egui::Ui) {
+    fn create_table (&self, ui: &mut egui::Ui, reset: bool) {
         let origin = if self.target_view { Origin::Target } else { Origin::Source };
         ui.style_mut().spacing.item_spacing = egui::Vec2::new(16.0, 0.0);
         let builder = egui_extras::TableBuilder::new(ui)
             .sense(egui::Sense::click())
-            .cell_layout(egui::Layout::left_to_right(egui::Align::TOP))
+            .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+                .animate_scrolling(false)
             .columns(egui_extras::Column::auto(), self.parser.variables(origin).count()-1)
+                .resizable(true)
             .column(egui_extras::Column::remainder());
-            // if reset {
-            //     builder.reset();
-            // }
+            if reset {
+                builder.reset();
+            }
             builder.header(24.0, |mut header| {
                 self.parser.variables(origin).for_each(|v| {
                     header.col(|ui| {
@@ -270,20 +293,24 @@ impl Reshaper
 
     }
 
-    fn load_file (&mut self, path: String) {
-        self.path = path;
+    fn load_file (&mut self) {
         self.data = Table::new();
         if let Ok(file) = std::fs::File::open(&self.path) {
             let reader  = std::io::BufReader::new(file);
             std::io::BufRead::lines(reader).for_each(|row| {
                 if let Ok(row) = row {
-                    self.data.add(row.as_str(), self.parser.split(row.as_str()).unwrap_or_default());
+                    if !row.is_empty() && !row.starts_with('#') { // Treat these lines as comments.
+                        self.data.add(row.as_str(), self.parser.split(row.as_str()).unwrap_or_default());
+                    }
                 }
             });
         }
+        // Since TableBuilder needs to be reset.
+        self.state = StateTracker::Changed;
     }
 
     fn save_file (&mut self) {
+        self.state = StateTracker::Saving;
         if let Some(desktop) = dirs::desktop_dir() {
             let original = std::path::PathBuf::from(&self.path);
             let mut path = desktop.join(original.file_name().unwrap_or_default());
@@ -291,9 +318,10 @@ impl Reshaper
             if let Ok(mut file) = std::fs::File::create(path) {
                 for row in 0..self.data.row_count() {
                     if let Some(parts) = self.data.get_parts(row) {
-                        if let Ok(mut target) = self.parser.transform(parts) {
+                        if let Ok(mut target) = self.parser.transform(parts, self.do_quotes) {
                             target.push('\n');
                             if file.write_all(target.as_bytes()).is_err() {
+                                self.state = StateTracker::Idle;
                                 return; // Result should be returned to inform user.
                             }
                         }
@@ -301,6 +329,7 @@ impl Reshaper
                 }
             };
         };
+        self.state = StateTracker::Idle;
     }
 
 }
@@ -320,6 +349,16 @@ impl App for Reshaper
         });
         // Must be last for remaining size in the middle to be calculated correctly.
         egui::CentralPanel::default().frame(self.get_frame()).show(context, |ui| {
+            if self.state == StateTracker::Saving { // Needs to be in separate thread to be visible?
+                egui::CentralPanel::default().frame(self.get_frame()).show(context, |ui| {
+                    ui.vertical_centered(|ui| {
+                        ui.add_space(48.0);
+                        ui.spinner();
+                        ui.label("Processing data ...");
+                    });
+                });
+                return;
+            }; 
             let mut hovered = egui::HoveredFile::default();
             let mut dropped = egui::DroppedFile::default();
             context.input(|input| {
@@ -337,13 +376,17 @@ impl App for Reshaper
             }
             if dropped.path.is_some() {
                 if let Some(path) = &dropped.path {
-                    self.load_file(path.display().to_string());
+                    self.path = path.display().to_string();
+                    self.load_file();
                 };
             }
             if self.data.is_empty() {
                 ui.add_sized(ui.available_size(), egui::Label::new(egui::RichText::new("(drop file here)").heading().italics().weak()));
             } else {
-                self.create_table(ui);
+                self.create_table(ui, self.state == StateTracker::Changed);
+                if self.state == StateTracker::Changed {
+                    self.state = StateTracker::Idle; // Need a TableBuilder reset after loading new data.
+                }
             }
         });
     }

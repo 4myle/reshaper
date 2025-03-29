@@ -1,5 +1,5 @@
 
-use std::rc::Rc;
+use std::sync::Arc;
 use crate::models::row::Row;
 
 #[derive(Default)]
@@ -37,7 +37,7 @@ impl Table
         self.rows[index].get(column)
     }
 
-    pub fn get_parts (&self, index: usize) -> Option<&Vec<Rc<str>>> {
+    pub fn get_parts (&self, index: usize) -> Option<&Vec<Arc<str>>> {
         if index >= self.rows.len() {
             return None;
         }

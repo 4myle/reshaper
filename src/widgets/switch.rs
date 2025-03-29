@@ -44,7 +44,4 @@ impl Widget for Switch
         response
     }
 }
-// Alternative way without struct, lifetimes and what not.
-// pub fn toggle (state: &mut bool) -> impl egui::Widget + '_ {
-//     move |ui: &mut egui::Ui| switch(ui, state)
-// }
+
