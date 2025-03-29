@@ -19,7 +19,7 @@ Blank here means "one or more white space characters". Input file can be like:
 2024-10-26 M: 116/72 81
 ```
 
-With an target template (to display and export) a file like:
+With a target template (to display and export) a file like:
 ```
 <date>,<pulse>,<systolic>,<diastolic>
 ```
