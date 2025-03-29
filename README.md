@@ -3,7 +3,7 @@
 Simple template-based parsing and transforming of value-based text files. 
 User interface made with [egui](https://github.com/emilk/egui).
 
-> **DISCLAIMER**: this application is a hobby project and should be used as such. Any other use it at your own risk. It is provided as-is and is not likely to be maintained regurlarly.
+> **DISCLAIMER**: this application is a hobby project and should be used as such. Any other use it at your own risk. It is provided as-is and is not likely to be maintained regularly.
 
 ![Screenshot of Reshaper](assets/Reshaper-screenshot.png)
 
