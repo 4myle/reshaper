@@ -7,7 +7,6 @@ target produced:    2024-10-25,63,131,79
 */
 
 use regex::Regex;
-use std::sync::Arc;
 use std::slice::Iter;
 
 const TAGMATCHER: &str = r"<([^>]*)>|([^<>]*)";
@@ -149,7 +148,7 @@ impl Parser
         Ok(result)
     }
 
-    pub fn transform (&self, parts: &[Arc<str>], do_quotes: bool) -> Result<String, &str> {
+    pub fn transform (&self, parts: &[Box<str>], do_quotes: bool) -> Result<String, &str> {
         if self.replacer.is_empty()  || self.target.positions.is_empty() {
             return Err("Nothing to transform.");
         }

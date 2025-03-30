@@ -5,13 +5,11 @@
 // #![deny(clippy::panic)]
 // #![deny(unused_must_use)]
 
-use std::sync::Arc;
-
 #[derive(Default)]
 pub struct Row
 {
     text: String,
-    parts: Vec<Arc<str>>
+    parts: Vec<Box<str>>
 }
 
 impl Row
@@ -38,7 +36,7 @@ impl Row
         Some(&self.parts[column])
     }
 
-    pub fn get_parts (&self) -> &Vec<Arc<str>> {
+    pub fn get_parts (&self) -> &Vec<Box<str>> {
         &self.parts
     }
 
