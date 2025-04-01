@@ -4,8 +4,13 @@ Simple template-based parsing and transforming of a text file with values.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
-use std::io::Write;
 // use std::thread;
+use std::fs::File;
+use std::io::{
+    BufReader,
+    BufRead, 
+    Write
+};
 
 use eframe::egui;
 use eframe:: { 
@@ -63,6 +68,8 @@ struct Reshaper
     target: String,
     ui_size: f32,
     ui_mode: InterfaceMode,
+    do_quotes: bool,
+    do_skip_1: bool,
 
     #[serde(skip)] parser: Parser,
     #[serde(skip)] data: Table,
@@ -70,8 +77,7 @@ struct Reshaper
     #[serde(skip)] source_error: String,
     #[serde(skip)] target_error: String,
     #[serde(skip)] state: StateTracker,
-    #[serde(skip)] target_view: bool,
-    #[serde(skip)] do_quotes: bool
+    #[serde(skip)] target_view: bool
 }
 
 impl Default for Reshaper
@@ -82,14 +88,15 @@ impl Default for Reshaper
             target: String::from("<date>,<pulse>,<systolic>,<diastolic>"),
             ui_size: 1.2,
             ui_mode: InterfaceMode::Dark,
+            do_quotes: false,
+            do_skip_1: true,
             parser: Parser::new(),
             data: Table::new(),
             path: String::new(),
             source_error: String::new(),
             target_error: String::new(),
             state: StateTracker::Idle,
-            target_view: true,
-            do_quotes: false
+            target_view: true
         }
     }
 }
@@ -227,6 +234,7 @@ impl Reshaper
                     context.set_cursor_icon(if outside { egui::CursorIcon::Grabbing } else { egui::CursorIcon::NoDrop });
                 }
                 ui.checkbox(&mut self.do_quotes, "Write quotation marks");
+                ui.checkbox(&mut self.do_skip_1, "Skip first row");
             });
         }
     }
@@ -295,15 +303,16 @@ impl Reshaper
 
     fn load_file (&mut self) {
         self.data = Table::new();
-        if let Ok(file) = std::fs::File::open(&self.path) {
-            let reader  = std::io::BufReader::new(file);
-            std::io::BufRead::lines(reader).for_each(|row| {
-                if let Ok(row) = row {
-                    if !row.is_empty() && !row.starts_with('#') { // Treat these lines as comments.
-                        self.data.add(row.as_str(), self.parser.split(row.as_str()).unwrap_or_default());
-                    }
+        if let Ok(file) = File::open(&self.path) {
+            let reader  = BufReader::new(file);
+            let lines = reader.lines();
+            let skips = usize::from(self.do_skip_1); // Bug in clippy won't allow let if with boolean?
+            for row in lines.skip(skips) {
+                let Ok(row) = row else { continue };
+                if !row.is_empty() && !row.starts_with('#') { // Treat these lines as comments.
+                    self.data.add(row.as_str(), self.parser.split(row.as_str()).unwrap_or_default());
                 }
-            });
+            };
         }
         // Since TableBuilder needs to be reset.
         self.state = StateTracker::Changed;
@@ -315,7 +324,7 @@ impl Reshaper
             let original = std::path::PathBuf::from(&self.path);
             let mut path = desktop.join(original.file_name().unwrap_or_default());
             path.set_extension("out.csv");
-            if let Ok(mut file) = std::fs::File::create(path) {
+            if let Ok(mut file) = File::create(path) {
                 for row in 0..self.data.row_count() {
                     if let Some(parts) = self.data.get_parts(row) {
                         if let Ok(mut target) = self.parser.transform(parts, self.do_quotes) {

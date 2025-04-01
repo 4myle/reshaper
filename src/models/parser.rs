@@ -138,7 +138,7 @@ impl Parser
         self.extractor.captures_read(&mut slices, row);
         for index in 1..slices.len() {
             if let Some(mut slice) = slices.get(index) {
-                if  bytes[slice.0] == b'"' && bytes[slice.1-1] == b'"'{ 
+                if  slice.0 < bytes.len() && bytes[slice.0] == b'"' && bytes[slice.1-1] == b'"'{ 
                     slice.0 += 1;
                     slice.1 -= 1;
                 }
