@@ -41,7 +41,6 @@ enum InterfaceMode
 #[derive(Default, PartialEq)]
 enum StateTracker 
 {
-    Changed,  // When table structure has changed and reset is needed.
     Saving,   // When saving is in progress.
     Dragging, // When export button is being dragged
     #[default] Idle
@@ -189,7 +188,6 @@ impl Reshaper
                 self.source_error = self.parser.set_source(&self.source).as_message();
                 self.target_error = self.parser.set_target(&self.target).as_message(); // Source errors can cause target errors.
                 if  self.source_error.is_empty() && self.target_error.is_empty(){
-                    self.state = StateTracker::Changed;
                     self.load_file();
                 }
             };
@@ -200,9 +198,6 @@ impl Reshaper
             ui.label(egui::RichText::new("TARGET TEMPLATE").small().weak());
             if ui.add(ErrorField::new(&mut self.target, self.target_error.is_empty())).changed() {
                 self.target_error = self.parser.set_target(&self.target).as_message();
-                if  self.target_error.is_empty() {
-                    self.state = StateTracker::Changed;
-                }
             };
             if !self.target_error.is_empty() {
                 ui.label(egui::RichText::new(&self.target_error).color(egui::Color32::RED));
@@ -266,19 +261,17 @@ impl Reshaper
         });
     }
 
-    fn create_table (&self, ui: &mut egui::Ui, reset: bool) {
+    fn create_table (&self, ui: &mut egui::Ui) {
         let origin = if self.target_view { Origin::Target } else { Origin::Source };
-        ui.style_mut().spacing.item_spacing = egui::Vec2::new(16.0, 0.0);
-        let builder = egui_extras::TableBuilder::new(ui)
-            .sense(egui::Sense::click())
-            .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-                .animate_scrolling(false)
-            .columns(egui_extras::Column::auto(), self.parser.variables(origin).count()-1)
-                .resizable(true)
-            .column(egui_extras::Column::remainder());
-            if reset {
-                builder.reset();
-            }
+        if self.parser.variables(origin).count() > 0 {
+            ui.style_mut().spacing.item_spacing = egui::Vec2::new(16.0, 0.0);
+            let builder = egui_extras::TableBuilder::new(ui)
+                .sense(egui::Sense::click())
+                .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+                    .animate_scrolling(false)
+                .columns(egui_extras::Column::auto(), self.parser.variables(origin).count()-1) 
+                    .resizable(true)
+                .column(egui_extras::Column::remainder());
             builder.header(24.0, |mut header| {
                 self.parser.variables(origin).for_each(|v| {
                     header.col(|ui| {
@@ -298,7 +291,7 @@ impl Reshaper
                     };
                 });
             });
-
+        }
     }
 
     fn load_file (&mut self) {
@@ -314,8 +307,6 @@ impl Reshaper
                 }
             };
         }
-        // Since TableBuilder needs to be reset.
-        self.state = StateTracker::Changed;
     }
 
     fn save_file (&mut self) {
@@ -392,10 +383,7 @@ impl App for Reshaper
             if self.data.is_empty() {
                 ui.add_sized(ui.available_size(), egui::Label::new(egui::RichText::new("(drop file here)").heading().italics().weak()));
             } else {
-                self.create_table(ui, self.state == StateTracker::Changed);
-                if self.state == StateTracker::Changed {
-                    self.state = StateTracker::Idle; // Need a TableBuilder reset after loading new data.
-                }
+                self.create_table(ui);
             }
         });
     }
