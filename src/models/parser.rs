@@ -8,6 +8,7 @@ target produced:    2024-10-25,63,131,79
 
 use regex::Regex;
 use std::slice::Iter;
+use std::fmt::Write;
 
 const TAGMATCHER: &str = r"<([^>]*)>|([^<>]*)";
 
@@ -114,7 +115,7 @@ impl Parser
                     return Err("Variable name must be at least one character long")
                 }
                 if let Some(index) = self.source.variables.iter().position(|v| v == variable.as_str()) {
-                    result.push_str(&format!("${}", index + 1));
+                    let _ = write!(result, "${}", index+1);
                     self.target.variables.push(self.source.variables[index].clone());
                     self.target.positions.push(index);
                 } else {

@@ -2,7 +2,7 @@
 description = "Template-based parsing and transforming of a text file"
 name = "reshaper"
 authors = ["Roger Salomonsson <medicorab@gmail.com>"]
-version = "1.0.2"
+version = "1.0.3"
 edition = "2024"
 
 [dependencies]

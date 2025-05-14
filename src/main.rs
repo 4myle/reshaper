@@ -60,6 +60,7 @@ impl <T,E> MessageOnly for Result<T,E> where E: ToString {
     }
 }
 
+#[allow(clippy::struct_excessive_bools)]
 #[derive(serde::Deserialize, serde::Serialize)]
 struct Reshaper
 {
@@ -67,8 +68,9 @@ struct Reshaper
     target: String,
     ui_size: f32,
     ui_mode: InterfaceMode,
-    do_quotes: bool,
     do_skip_1: bool,
+    do_quotes: bool,
+    do_header: bool,
 
     #[serde(skip)] parser: Parser,
     #[serde(skip)] data: Table,
@@ -87,8 +89,9 @@ impl Default for Reshaper
             target: String::from("<date>,<pulse>,<systolic>,<diastolic>"),
             ui_size: 1.2,
             ui_mode: InterfaceMode::Dark,
-            do_quotes: false,
             do_skip_1: true,
+            do_quotes: false,
+            do_header: false,
             parser: Parser::new(),
             data: Table::new(),
             path: String::new(),
@@ -138,7 +141,7 @@ impl Reshaper
             p.insert(0, textfont.to_string());
             p.insert(1, iconfont.to_string());
             context.set_fonts(fonts);
-        };
+        }
     }
 
     // Static method, used in new.
@@ -190,7 +193,7 @@ impl Reshaper
                 if  self.source_error.is_empty() && self.target_error.is_empty(){
                     self.load_file();
                 }
-            };
+            }
             if !self.source_error.is_empty() {
                 ui.label(egui::RichText::new(&self.source_error).color(egui::Color32::RED));
             }
@@ -198,7 +201,7 @@ impl Reshaper
             ui.label(egui::RichText::new("TARGET TEMPLATE").small().weak());
             if ui.add(ErrorField::new(&mut self.target, self.target_error.is_empty())).changed() {
                 self.target_error = self.parser.set_target(&self.target).as_message();
-            };
+            }
             if !self.target_error.is_empty() {
                 ui.label(egui::RichText::new(&self.target_error).color(egui::Color32::RED));
             }
@@ -208,7 +211,7 @@ impl Reshaper
             ui.horizontal(|ui| {
                 if ui.add(Switch::new(self.target_view)).clicked() {
                     self.target_view = !self.target_view;
-                };
+                }
                 ui.label(format!("{} data shown in table.", if self.target_view {"Transformed"} else {"Original"}));
                 ui.add_space(12.0);
                 let dragger = ui.small_button("\u{e074} Drag to export").interact(egui::Sense::click_and_drag()).highlight();
@@ -228,8 +231,9 @@ impl Reshaper
                 if self.state == StateTracker::Dragging {
                     context.set_cursor_icon(if outside { egui::CursorIcon::Grabbing } else { egui::CursorIcon::NoDrop });
                 }
-                ui.checkbox(&mut self.do_quotes, "Write quotation marks");
                 ui.checkbox(&mut self.do_skip_1, "Skip first row");
+                ui.checkbox(&mut self.do_quotes, "Write quotation marks");
+                ui.checkbox(&mut self.do_header, "Write headers");
             });
         }
     }
@@ -240,7 +244,7 @@ impl Reshaper
                 ui.label(egui::RichText::new("TEXT SIZE").small().weak());
                 if ui.add(egui::Slider::new(&mut self.ui_size, 1.0..=1.7)).changed() {
                     context.set_zoom_factor(self.ui_size);
-                };
+                }
             });
             ui.add_space(24.0);
             ui.vertical(|ui| {
@@ -256,7 +260,7 @@ impl Reshaper
                             Self::set_style(ui.ctx(), InterfaceMode::Dark);
                         }
                     }
-                };
+                }
             });
         });
     }
@@ -316,19 +320,40 @@ impl Reshaper
             let mut path = desktop.join(original.file_name().unwrap_or_default());
             path.set_extension("out.csv");
             if let Ok(mut file) = File::create(path) {
+                if self.do_header {
+                    let mut target = String::new();
+                    for header in self.parser.variables(Origin::Target) {
+                        if self.do_quotes { 
+                            target.push('"');
+                        }
+                        target.push_str(header);
+                        if self.do_quotes { 
+                            target.push('"');
+                        }
+                        target.push(',');
+                    }
+                    if  target.ends_with(',') {
+                        target.pop();
+                    }
+                    target.push('\n');
+                    if file.write_all(target.as_bytes()).is_err() {
+                        self.state = StateTracker::Idle;
+                        return; // Result should be returned to inform user.
+                    }
+                }
                 for row in 0..self.data.row_count() {
                     if let Some(parts) = self.data.get_parts(row) {
                         if let Ok(mut target) = self.parser.transform(parts, self.do_quotes) {
                             target.push('\n');
                             if file.write_all(target.as_bytes()).is_err() {
                                 self.state = StateTracker::Idle;
-                                return; // Result should be returned to inform user.
+                                return;
                             }
                         }
                     }
                 }
-            };
-        };
+            }
+        }
         self.state = StateTracker::Idle;
     }
 
@@ -358,12 +383,12 @@ impl App for Reshaper
                     });
                 });
                 return;
-            }; 
+            }
             let mut hovered = egui::HoveredFile::default();
             let mut dropped = egui::DroppedFile::default();
             context.input(|input| {
-                if !input.raw.hovered_files.is_empty() { hovered = input.raw.hovered_files[0].clone() };
-                if !input.raw.dropped_files.is_empty() { dropped = input.raw.dropped_files[0].clone() };
+                if !input.raw.hovered_files.is_empty() { hovered = input.raw.hovered_files[0].clone() }
+                if !input.raw.dropped_files.is_empty() { dropped = input.raw.dropped_files[0].clone() }
             });
             if hovered.path.is_some() {                
                 ui.painter().rect(
@@ -378,7 +403,7 @@ impl App for Reshaper
                 if let Some(path) = &dropped.path {
                     self.path = path.display().to_string();
                     self.load_file();
-                };
+                }
             }
             if self.data.is_empty() {
                 ui.add_sized(ui.available_size(), egui::Label::new(egui::RichText::new("(drop file here)").heading().italics().weak()));

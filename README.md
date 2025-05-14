@@ -7,7 +7,7 @@ User interface made with [egui](https://github.com/emilk/egui).
 
 ![Screenshot of Reshaper](assets/Reshaper-screenshot.png)
 
-## Use cases
+## Usage cases
 
 The application can be used to reshape text files, like CSV-files or files delimited in other ways, to other formats. 
 Example of source template to read a file:
@@ -34,6 +34,8 @@ The output would be:
 As for now, only simple use cases like this are supported.
 
 ## Future
+
+* Save settings per file stem in `app.ron` (as in [Bitcoder](https://github.com/4myle/bitcoder)).
 
 Possible extension to markup could be support for types and conversions. For example:
 ```
