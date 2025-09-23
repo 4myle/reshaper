@@ -1,5 +1,4 @@
 # Reshaper
-
 Simple template-based parsing and transforming of value-based text files. 
 User interface made with [egui](https://github.com/emilk/egui).
 
