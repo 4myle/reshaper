@@ -165,7 +165,7 @@ impl Reshaper
         visuals.selection.stroke.color  = ACCENT_COLOR; 
         visuals.selection.bg_fill = ACCENT_COLOR.gamma_multiply(0.35);
         visuals.slider_trailing_fill = true;
-        context.style_mut(|style| {
+        context.global_style_mut(|style| {
             style.spacing.item_spacing = egui::Vec2::new(12.0, 8.0);
             style.spacing.button_padding = egui::Vec2::new(8.0, 2.0);
         });
@@ -184,7 +184,7 @@ impl Reshaper
         }
     }
 
-    fn create_upper (&mut self, ui: &mut egui::Ui, context: &egui::Context) {
+    fn create_upper (&mut self, ui: &mut egui::Ui) {
         ui.with_layout(egui::Layout::top_down_justified(egui::Align::LEFT), |ui| {
             ui.label(egui::RichText::new("SOURCE TEMPLATE").small().weak());
             if ui.add(ErrorField::new(&mut self.source, self.source_error.is_empty())).changed() {
@@ -218,9 +218,9 @@ impl Reshaper
                 if  dragger.drag_started() {
                     self.state = StateTracker::Dragging;
                 }
-                let outside = !context.screen_rect().contains(ui.input(|i| i.pointer.interact_pos()).unwrap_or_default());
+                let outside = !ui.ctx().content_rect().contains(ui.input(|i| i.pointer.interact_pos()).unwrap_or_default());
                 if  dragger.drag_stopped() {
-                    context.set_cursor_icon(egui::CursorIcon::Default);
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
                     self.state = StateTracker::Idle;
                     if outside {
                         // thread::spawn(|| { // Should be this easy (nogo Rust).
@@ -229,7 +229,7 @@ impl Reshaper
                     }
                 }
                 if self.state == StateTracker::Dragging {
-                    context.set_cursor_icon(if outside { egui::CursorIcon::Grabbing } else { egui::CursorIcon::NoDrop });
+                    ui.ctx().set_cursor_icon(if outside { egui::CursorIcon::Grabbing } else { egui::CursorIcon::NoDrop });
                 }
                 ui.checkbox(&mut self.do_skip_1, "Skip first row");
                 ui.checkbox(&mut self.do_quotes, "Write quotation marks");
@@ -238,12 +238,12 @@ impl Reshaper
         }
     }
 
-    fn create_lower (&mut self, ui: &mut egui::Ui, context: &egui::Context) {
+    fn create_lower (&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 ui.label(egui::RichText::new("TEXT SIZE").small().weak());
                 if ui.add(egui::Slider::new(&mut self.ui_size, 1.0..=1.7)).changed() {
-                    context.set_zoom_factor(self.ui_size);
+                    ui.ctx().set_zoom_factor(self.ui_size);
                 }
             });
             ui.add_space(24.0);
@@ -342,13 +342,11 @@ impl Reshaper
                     }
                 }
                 for row in 0..self.data.row_count() {
-                    if let Some(parts) = self.data.get_parts(row) {
-                        if let Ok(mut target) = self.parser.transform(parts, self.do_quotes) {
-                            target.push('\n');
-                            if file.write_all(target.as_bytes()).is_err() {
-                                self.state = StateTracker::Idle;
-                                return;
-                            }
+                    if let Some(parts) = self.data.get_parts(row) && let Ok(mut target) = self.parser.transform(parts, self.do_quotes) {
+                        target.push('\n');
+                        if file.write_all(target.as_bytes()).is_err() {
+                            self.state = StateTracker::Idle;
+                            return;
                         }
                     }
                 }
@@ -365,17 +363,17 @@ impl App for Reshaper
         eframe::set_value(storage, eframe::APP_KEY, self);
     }
 
-    fn update (&mut self, context: &egui::Context, _frame: &mut Frame) {
-        egui::TopBottomPanel::top("Templates").frame(self.get_frame()).resizable(false).show(context, |ui| {
-            self.create_upper(ui, context);
+    fn ui (&mut self, ui: &mut egui::Ui, _frame: &mut Frame) {
+        egui::Panel::top("Templates").frame(self.get_frame()).resizable(false).show_inside(ui, |ui| {
+            self.create_upper(ui);
         });
-        egui::TopBottomPanel::bottom("Settings").frame(self.get_frame()).resizable(false).show(context, |ui| {
-            self.create_lower(ui, context);
+        egui::Panel::bottom("Settings").frame(self.get_frame()).resizable(false).show_inside(ui, |ui| {
+            self.create_lower(ui);
         });
         // Must be last for remaining size in the middle to be calculated correctly.
-        egui::CentralPanel::default().frame(self.get_frame()).show(context, |ui| {
+        egui::CentralPanel::default().frame(self.get_frame()).show_inside(ui, |ui| {
             if self.state == StateTracker::Saving { // Needs to be in separate thread to be visible?
-                egui::CentralPanel::default().frame(self.get_frame()).show(context, |ui| {
+                egui::CentralPanel::default().frame(self.get_frame()).show_inside(ui, |ui| {
                     ui.vertical_centered(|ui| {
                         ui.add_space(48.0);
                         ui.spinner();
@@ -386,7 +384,7 @@ impl App for Reshaper
             }
             let mut hovered = egui::HoveredFile::default();
             let mut dropped = egui::DroppedFile::default();
-            context.input(|input| {
+            ui.ctx().input(|input| {
                 if !input.raw.hovered_files.is_empty() { hovered = input.raw.hovered_files[0].clone() }
                 if !input.raw.dropped_files.is_empty() { dropped = input.raw.dropped_files[0].clone() }
             });
@@ -399,11 +397,9 @@ impl App for Reshaper
                     egui::StrokeKind::Middle
                 );
             }
-            if dropped.path.is_some() {
-                if let Some(path) = &dropped.path {
-                    self.path = path.display().to_string();
-                    self.load_file();
-                }
+            if dropped.path.is_some() && let Some(path) = &dropped.path {
+                self.path = path.display().to_string();
+                self.load_file();
             }
             if self.data.is_empty() {
                 ui.add_sized(ui.available_size(), egui::Label::new(egui::RichText::new("(drop file here)").heading().italics().weak()));

@@ -2,14 +2,14 @@
 description = "Template-based parsing and transforming of a text file"
 name = "reshaper"
 authors = ["Roger Salomonsson <medicorab@gmail.com>"]
-version = "1.0.3"
+version = "1.0.5"
 edition = "2024"
 
 [dependencies]
-eframe = { version = "0.31.1", default-features = false, features = ["glow", "persistence"] }
-egui_extras = "0.31.1"
-serde  = "1.0.219"
-regex  = "1.11.1"
+eframe = { version = "0.34.2", default-features = false, features = ["glow", "persistence"] }
+egui_extras = "0.34.2"
+serde  = "1.0.228"
+regex  = "1.12.3"
 dirs = "6.0.0"
 
 # [dependencies.tracy]
@@ -18,7 +18,7 @@ dirs = "6.0.0"
 # features = ["enable","sampling"]
 
 [build-dependencies]
-winresource = "0.1.20"
+winresource = "0.1.31"
 
 [profile.dev]
 debug = 2
@@ -37,10 +37,14 @@ codegen-units = 1
 panic = "abort"
 strip = "symbols"
 
-[lints.clippy]
-pedantic = "deny"
+[lints.rust]
 unsafe_code = "deny"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+pedantic = "deny"
 unwrap_used = "deny"
 expect_used = "deny"
-used_must_use = "deny"
 panic = "deny"

@@ -49,14 +49,14 @@ impl Parser
         Self::default()
     }
 
-    pub fn variables (&self, origin: Origin) -> Iter<String> {
+    pub fn variables (&self, origin: Origin) -> Iter<'_,String> {
         match origin {
             Origin::Source => self.source.variables.iter(),
             Origin::Target => self.target.variables.iter()
         }
     }
 
-    pub fn positions (&self, origin: Origin) -> Iter<usize> {
+    pub fn positions (&self, origin: Origin) -> Iter<'_,usize> {
         match origin {
             Origin::Source => self.source.positions.iter(),
             Origin::Target => self.target.positions.iter()
